@@ -169,92 +169,29 @@ structure LinarithConfig : Type where
 
 end
 
-/-! ### Control -/
-
-/--
-If `e` is a comparison `a R b` or the negation of a comparison `¬ a R b`, found in the target,
-`getContrLemma e` returns the name of a lemma that will change the goal to an
-implication, along with the type of `a` and `b`.
-
-For example, if `e` is `(a : ℕ) < b`, returns ``(`lt_of_not_ge, ℕ)``.
--/
-def getContrLemma (e : Expr) : MetaM (Name × Expr) := do
-  match ← e.ineqOrNotIneq? with
-  | (true, Ineq.lt, t, _) => pure (``lt_of_not_ge, t)
-  | (true, Ineq.le, t, _) => pure (``le_of_not_gt, t)
-  | (true, Ineq.eq, t, _) => pure (``eq_of_not_lt_of_not_gt, t)
-  | (false, _, t, _) => pure (``Not.intro, t)
-
-/--
-`applyContrLemma` inspects the target to see if it can be moved to a hypothesis by negation.
-For example, a goal `⊢ a ≤ b` can become `a > b ⊢ false`.
-If this is the case, it applies the appropriate lemma and introduces the new hypothesis.
-It returns the type of the terms in the comparison (e.g. the type of `a` and `b` above) and the
-newly introduced local constant.
-Otherwise returns `none`.
--/
-def applyContrLemma (g : MVarId) : MetaM (Option (Expr × Expr) × MVarId) := do
-  try
-    let (nm, tp) ← getContrLemma (← withReducible g.getType')
-    let [g] ← g.apply (← mkConst' nm) | failure
-    let (f, g) ← g.intro1P
-    return (some (tp, .fvar f), g)
-  catch _ => return (none, g)
-
-/-- A map of keys to values, where the keys are `Expr` up to defeq and one key can be
-associated to multiple values. -/
-abbrev ExprMultiMap α := Array (Expr × List α)
 
 
-/-- Insert a new value into the map at key `k`. This does a defeq check with all other keys
-in the map. -/
-def ExprMultiMap.insert {α : Type} (self : ExprMultiMap α) (k : Expr) (v : α) :
-    MetaM (ExprMultiMap α) := do
-  for h : i in [:self.size] do
-    if ← isDefEq self[i].1 k then
-      return self.modify i fun (k, vs) => (k, v::vs)
-  return self.push (k, [v])
 
-/--
-`partitionByType l` takes a list `l` of proofs of comparisons. It sorts these proofs by
-the type of the variables in the comparison, e.g. `(a : ℚ) < 1` and `(b : ℤ) > c` will be separated.
-Returns a map from a type to a list of comparisons over that type.
--/
-def partitionByType (ty : Expr) : List Expr → MetaM (List Expr)
+def extractByType (ty : Expr) : List Expr → MetaM (List Expr)
   | [] => return []
   | h :: l => do
-    let l' ← partitionByType ty l
+    let l' ← extractByType ty l
     if (ty == (← typeOfIneqProof h)) then
       return h :: l'
     else
       return l'
 
-/--
-Given a list `ls` of lists of proofs of comparisons, `findLinarithContradiction cfg ls` will try to
-prove `False` by calling `linarith` on each list in succession. It will stop at the first proof of
-`False`, and fail if no contradiction is found with any list.
--/
-def findLinarithContradiction (cfg : LinarithConfig) (g : MVarId) (ls : List Expr) :
-    MetaM (List Comp × ℕ) :=
-  try
-    getCoeffs cfg.transparency g ls
-  catch e => throwError "linarith failed to find a contradiction\n{g}\n{e.toMessageData}"
 
-
-
-partial def parseLinarithStructure (cfg : LinarithConfig := {}) (ty : Expr)
+partial def parseLinarithStructure (ty : Expr) (cfg : LinarithConfig := {})
     (g : MVarId) : MetaM Unit := g.withContext do
 
   let hyps := (← getLocalHyps).toList
 
-  let singleProcess (g : MVarId) (hyps : List Expr) : MetaM Unit := g.withContext do
-    linarithTraceProofs s!"after preprocessing, linarith has {hyps.length} facts:" hyps
-    let hyp_set ← partitionByType ty hyps
-    let stuff ← findLinarithContradiction cfg g hyp_set
   let mut preprocessors := cfg.preprocessors
   let branches ← preprocess preprocessors g hyps
   for (g, es) in branches do
-    let r ← singleProcess g es
+    let hyp_set ← extractByType ty es
+    let r ← getCoeffs cfg.transparency g hyp_set
 
 end Linarith
 
