@@ -4,11 +4,15 @@ import Mathlib.Tactic.Linarith
 open Mathlib.Tactic
 
 open Lean
+open Meta
 open Parser.Category
 
 open Elab Tactic
-elab "maximize" e:term "as" h:ident : tactic => do
-  let stx ← `(tactic | have $h : $e ≤ 7 := by linarith)
+elab "maximize" e_stx:term "as" h_stx:ident : tactic => do
+  let e_exp : Expr ← Elab.Tactic.elabTerm e_stx none
+  let ty ← inferType e_exp
+  let h_exp : Expr ← Elab.Tactic.elabTerm h_stx none
+  let stx ← `(tactic | have $h_stx : $e_stx ≤ 7 := by linarith)
   Lean.Meta.Tactic.TryThis.addSuggestion .missing stx
   -- now it works but it is not clickable in the goal
 

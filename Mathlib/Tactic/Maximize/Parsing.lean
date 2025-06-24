@@ -220,82 +220,41 @@ def ExprMultiMap.insert {α : Type} (self : ExprMultiMap α) (k : Expr) (v : α)
 the type of the variables in the comparison, e.g. `(a : ℚ) < 1` and `(b : ℤ) > c` will be separated.
 Returns a map from a type to a list of comparisons over that type.
 -/
-def partitionByType (l : List Expr) : MetaM (ExprMultiMap Expr) :=
-  l.foldlM (fun m h => do m.insert (← typeOfIneqProof h) h) #[]
+def partitionByType (ty : Expr) : List Expr → MetaM (List Expr)
+  | [] => return []
+  | h :: l => do
+    let l' ← partitionByType ty l
+    if (ty == (← typeOfIneqProof h)) then
+      return h :: l'
+    else
+      return l'
 
 /--
 Given a list `ls` of lists of proofs of comparisons, `findLinarithContradiction cfg ls` will try to
 prove `False` by calling `linarith` on each list in succession. It will stop at the first proof of
 `False`, and fail if no contradiction is found with any list.
 -/
-def findLinarithContradiction (cfg : LinarithConfig) (g : MVarId) (ls : List (Expr × List Expr)) :
+def findLinarithContradiction (cfg : LinarithConfig) (g : MVarId) (ls : List Expr) :
     MetaM (List Comp × ℕ) :=
   try
-    ls.firstM (fun ⟨α, L⟩ =>
-      withTraceNode `linarith (return m!"{exceptEmoji ·} running on type {α}") <|
-        getCoeffs cfg.transparency g L)
+    getCoeffs cfg.transparency g ls
   catch e => throwError "linarith failed to find a contradiction\n{g}\n{e.toMessageData}"
 
 
-/--
-Given a list `hyps` of proofs of comparisons, `runLinarith cfg hyps prefType`
-preprocesses `hyps` according to the list of preprocessors in `cfg`.
-This results in a list of branches (typically only one),
-each of which must succeed in order to close the goal.
 
-In each branch, we partition the list of hypotheses by type, and run `linarith` on each class
-in the partition; one of these must succeed in order for `linarith` to succeed on this branch.
-If `prefType` is given, it will first use the class of proofs of comparisons over that type.
--/
--- If it succeeds, the passed metavariable should have been assigned.
-def runLinarith (cfg : LinarithConfig) (prefType : Option Expr) (g : MVarId)
-    (hyps : List Expr) : MetaM Unit := do
+partial def parseLinarithStructure (cfg : LinarithConfig := {}) (ty : Expr)
+    (g : MVarId) : MetaM Unit := g.withContext do
+
+  let hyps := (← getLocalHyps).toList
+
   let singleProcess (g : MVarId) (hyps : List Expr) : MetaM Unit := g.withContext do
     linarithTraceProofs s!"after preprocessing, linarith has {hyps.length} facts:" hyps
-    let mut hyp_set ← partitionByType hyps
-    trace[linarith] "hypotheses appear in {hyp_set.size} different types"
-    let stuff ← findLinarithContradiction cfg g hyp_set.toList
+    let hyp_set ← partitionByType ty hyps
+    let stuff ← findLinarithContradiction cfg g hyp_set
   let mut preprocessors := cfg.preprocessors
   let branches ← preprocess preprocessors g hyps
   for (g, es) in branches do
     let r ← singleProcess g es
-
-
-/--
-`linarith only_on hyps cfg` tries to close the goal using linear arithmetic. It fails
-if it does not succeed at doing this.
-
-* `hyps` is a list of proofs of comparisons to include in the search.
-* If `only_on` is true, the search will be restricted to `hyps`. Otherwise it will use all
-  comparisons in the local context.
-* If `cfg.transparency := semireducible`,
-  it will unfold semireducible definitions when trying to match atomic expressions.
--/
-partial def linarith (cfg : LinarithConfig := {})
-    (g : MVarId) : MetaM Unit := g.withContext do
-
-  /- If we are proving a comparison goal (and not just `False`), we consider the type of the
-    elements in the comparison to be the "preferred" type. That is, if we find comparison
-    hypotheses in multiple types, we will run `linarith` on the goal type first.
-    In this case we also receive a new variable from moving the goal to a hypothesis.
-    Otherwise, there is no preferred type and no new variable; we simply change the goal to `False`.
-  -/
-
-  let (g, target_type, new_var) ← match ← applyContrLemma g with
-  | (none, g) => failure
-  | (some (t, v), g) => pure (g, some t, some v)
-
-  g.withContext do
-  -- set up the list of hypotheses, considering the `only_on` and `restrict_type` options
-    let hyps := (← getLocalHyps).toList
-
-    -- TODO in mathlib3 we could specify a restriction to a single type.
-    -- I haven't done that here because I don't know how to store a `Type` in `LinarithConfig`.
-    -- There's only one use of the `restrict_type` configuration option in mathlib3,
-    -- and it can be avoided just by using `linarith only`.
-
-    linarithTraceProofs "linarith is running on the following hypotheses:" hyps
-    runLinarith cfg target_type g hyps
 
 end Linarith
 
