@@ -134,7 +134,8 @@ open Lean Elab Parser Tactic Meta
 open Batteries
 
 
-namespace Mathlib.Tactic.Linarith
+namespace Mathlib.Tactic.Maximize
+open Mathlib.Tactic.Linarith
 
 /-! ### Config objects
 
@@ -145,12 +146,8 @@ be in context to choose a default.
 
 section
 
-/-- A configuration object for `linarith`. -/
-structure MaximizeConfig : Type where
-  /-- Transparency mode for identifying atomic expressions in comparisons. -/
-  transparency : TransparencyMode := .reducible
-  /-- Override the list of preprocessors. -/
-  preprocessors : List Preprocessor := [filterComparisons, removeNegations, strengthenStrictInt,
+
+def defaultPreprocessors : List Preprocessor := [filterComparisons, removeNegations, strengthenStrictInt,
     compWithZero, cancelDenoms]
 
 /--
@@ -160,10 +157,10 @@ The preprocessors are run sequentially: each receives the output of the previous
 Note that a preprocessor may produce multiple or no expressions from each input expression,
 so the size of the list may change.
 -/
-def preprocess' (pps : List Preprocessor) (g : MVarId) (l : List Expr) :
-    MetaM Branch := do
+def preprocess' (pps : List Preprocessor) (l : List Expr) :
+    MetaM (List Expr) := do
   let zz ← pps.foldlM (init := l) fun ls pp => pp.globalize.transform ls
-  return (g, zz)
+  return (zz)
 
 end
 
@@ -180,19 +177,18 @@ def extractByType (ty : Expr) : List Expr → MetaM (List Expr)
       return l'
 
 
-partial def parseLinarithStructure (ty : Expr) (cfg : MaximizeConfig := {})
+partial def parseLinarithStructure (ty : Expr) (cfg : TransparencyMode := .reducible)
     (g : MVarId) : MetaM (List Comp × ℕ) := g.withContext do
 
   let hyps := (← getLocalHyps).toList
 
-  let mut preprocessors := cfg.preprocessors
-  let (g, es) ← preprocess' preprocessors g hyps
+  let es ← preprocess' defaultPreprocessors hyps
   let hyp_set ← extractByType ty es
-  let r ← getCoeffs cfg.transparency g hyp_set
+  let r ← getCoeffs cfg g hyp_set
   return r
 
 
-end Linarith
+end Maximize
 
 
 end Mathlib.Tactic
