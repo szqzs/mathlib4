@@ -179,13 +179,17 @@ def extractByType (ty : Expr) : List Expr → MetaM (List Expr)
 
 partial def parseLinarithStructure (ty H : Expr) (g : MVarId)
     (cfg : TransparencyMode := .reducible) : MetaM (List Comp × ℕ) := g.withContext do
-
+  --trace[debug] "the fake hypothesis H is {H}"
   let hyps := H :: (← getLocalHyps).toList
-
+  -- trace[debug] "the hypothesis are {hyps}"
   let es ← preprocess' defaultPreprocessors hyps
+  -- trace[debug] "the list is {es}"
   let hyp_set ← extractByType ty es
+  -- trace[debug] "the list of type is {hyp_set}"
   let r ← getCoeffs cfg g hyp_set
+  -- trace[debug] "the matrix is {r}"
   return r
+
 
 
 end Maximize

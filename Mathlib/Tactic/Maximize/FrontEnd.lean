@@ -9,6 +9,8 @@ open Qq
 open Parser.Category
 
 def bestBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ) : MetaM (TSyntax `term) := do
+  trace[debug] "there are {n} atoms"
+  trace[debug] "maximizing {rH}, hypotheses are {rr}"
   `(7)
 
 open Elab Tactic
@@ -22,20 +24,24 @@ elab "maximize" e_stx:term "as" h_stx:ident : tactic => do
   have H : Q($e_exp < 0) := q(sorry)
 
   let (r, n) ← Mathlib.Tactic.Maximize.parseLinarithStructure ty H (← getMainGoal)
-  let rH :: rr := r | failure
+  let rH :: rr := r.reverse | failure
   let bound ← bestBound rH rr n
 
   let stx ← `(tactic | have $h_stx : $e_stx ≤ $bound := by linarith)
   Lean.Meta.Tactic.TryThis.addSuggestion .missing stx
   -- now it works but it is not clickable in the goal
 
+set_option trace.debug true
 
 /--
-info: Try this: have H : 4 * x + y ≤ 6 := by linarith
+info: Try this: have H : 4 * x + y ≤ 7 := by linarith
 ---
-error: failed to infer type of example
+warning: declaration uses 'sorry'
+---
+warning: 'maximize 4 * x + y as H' tactic does nothing
+note: this linter can be disabled with `set_option linter.unusedTactic false`
 -/
-#guard_msgs in
+-- #guard_msgs in
 example {x y : ℚ} (h1 : 3 * x + y < 4) (h2 : x < 2) : True := by
   maximize 4 * x + y as H
   sorry
