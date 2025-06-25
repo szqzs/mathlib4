@@ -177,10 +177,10 @@ def extractByType (ty : Expr) : List Expr → MetaM (List Expr)
       return l'
 
 
-partial def parseLinarithStructure (ty : Expr) (g : MVarId)
+partial def parseLinarithStructure (ty H : Expr) (g : MVarId)
     (cfg : TransparencyMode := .reducible) : MetaM (List Comp × ℕ) := g.withContext do
 
-  let hyps := (← getLocalHyps).toList
+  let hyps := H :: (← getLocalHyps).toList
 
   let es ← preprocess' defaultPreprocessors hyps
   let hyp_set ← extractByType ty es

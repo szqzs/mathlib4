@@ -5,15 +5,27 @@ open Mathlib.Tactic
 
 open Lean
 open Meta
+open Qq
 open Parser.Category
+
+def bestBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ) : MetaM (TSyntax `term) := do
+  `(7)
 
 open Elab Tactic
 elab "maximize" e_stx:term "as" h_stx:ident : tactic => do
   let e_exp : Expr ← Elab.Tactic.elabTerm e_stx none
-  let ty ← inferType e_exp
-  let r ← Mathlib.Tactic.Maximize.parseLinarithStructure ty (← getMainGoal)
+  let ⟨u, ty, e_exp⟩ ← inferTypeQ' e_exp -- `ty : Q(Type u)`, `e_exp : Q($ty)`
+  -- let ty ← inferType e_exp -- `ty : Expr`
+  let i ← synthInstanceQ q(PartialOrder $ty)
+  let i ← synthInstanceQ q(Semiring $ty)
+  assumeInstancesCommute
+  have H : Q($e_exp < 0) := q(sorry)
 
-  let stx ← `(tactic | have $h_stx : $e_stx ≤ 7 := by linarith)
+  let (r, n) ← Mathlib.Tactic.Maximize.parseLinarithStructure ty H (← getMainGoal)
+  let rH :: rr := r | failure
+  let bound ← bestBound rH rr n
+
+  let stx ← `(tactic | have $h_stx : $e_stx ≤ $bound := by linarith)
   Lean.Meta.Tactic.TryThis.addSuggestion .missing stx
   -- now it works but it is not clickable in the goal
 
