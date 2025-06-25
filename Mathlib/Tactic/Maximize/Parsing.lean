@@ -164,8 +164,20 @@ structure LinarithConfig : Type where
   /-- Split `≠` in hypotheses, by branching in cases `<` and `>`. -/
   splitNe : Bool := false
   /-- Override the list of preprocessors. -/
-  preprocessors : List GlobalBranchingPreprocessor := defaultPreprocessors
+  preprocessors : List Preprocessor := [filterComparisons, removeNegations, strengthenStrictInt,
+    compWithZero, cancelDenoms]
 
+/--
+`preprocess pps l` takes a list `l` of proofs of propositions.
+It maps each preprocessor `pp ∈ pps` over this list.
+The preprocessors are run sequentially: each receives the output of the previous one.
+Note that a preprocessor may produce multiple or no expressions from each input expression,
+so the size of the list may change.
+-/
+def preprocess' (pps : List Preprocessor) (g : MVarId) (l : List Expr) :
+    MetaM Branch := do
+  let zz ← pps.foldlM (init := l) fun ls pp => pp.globalize.transform ls
+  return (g, zz)
 
 end
 
@@ -183,15 +195,16 @@ def extractByType (ty : Expr) : List Expr → MetaM (List Expr)
 
 
 partial def parseLinarithStructure (ty : Expr) (cfg : LinarithConfig := {})
-    (g : MVarId) : MetaM Unit := g.withContext do
+    (g : MVarId) : MetaM (List Comp × ℕ) := g.withContext do
 
   let hyps := (← getLocalHyps).toList
 
   let mut preprocessors := cfg.preprocessors
-  let branches ← preprocess preprocessors g hyps
-  for (g, es) in branches do
-    let hyp_set ← extractByType ty es
-    let r ← getCoeffs cfg.transparency g hyp_set
+  let (g, es) ← preprocess' preprocessors g hyps
+  let hyp_set ← extractByType ty es
+  let r ← getCoeffs cfg.transparency g hyp_set
+  return r
+
 
 end Linarith
 
