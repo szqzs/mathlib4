@@ -177,8 +177,8 @@ def extractByType (ty : Expr) : List Expr → MetaM (List Expr)
       return l'
 
 
-partial def parseLinarithStructure (ty : Expr) (cfg : TransparencyMode := .reducible)
-    (g : MVarId) : MetaM (List Comp × ℕ) := g.withContext do
+partial def parseLinarithStructure (ty : Expr) (g : MVarId)
+    (cfg : TransparencyMode := .reducible) : MetaM (List Comp × ℕ) := g.withContext do
 
   let hyps := (← getLocalHyps).toList
 
