@@ -146,23 +146,9 @@ be in context to choose a default.
 section
 
 /-- A configuration object for `linarith`. -/
-structure LinarithConfig : Type where
-  /-- Discharger to prove that a candidate linear combination of hypothesis is zero. -/
-  -- TODO There should be a def for this, rather than calling `evalTactic`?
-  discharger : TacticM Unit := do evalTactic (← `(tactic| ring1))
-  -- We can't actually store a `Type` here,
-  -- as we want `LinarithConfig : Type` rather than ` : Type 1`,
-  -- so that we can define `elabLinarithConfig : Lean.Syntax → Lean.Elab.TermElabM LinarithConfig`.
-  -- For now, we simply don't support restricting the type.
-  -- (restrict_type : Option Type := none)
-  /-- Prove goals which are not linear comparisons by first calling `exfalso`. -/
-  exfalso : Bool := true
+structure MaximizeConfig : Type where
   /-- Transparency mode for identifying atomic expressions in comparisons. -/
   transparency : TransparencyMode := .reducible
-  /-- Split conjunctions in hypotheses. -/
-  splitHypotheses : Bool := true
-  /-- Split `≠` in hypotheses, by branching in cases `<` and `>`. -/
-  splitNe : Bool := false
   /-- Override the list of preprocessors. -/
   preprocessors : List Preprocessor := [filterComparisons, removeNegations, strengthenStrictInt,
     compWithZero, cancelDenoms]
@@ -194,7 +180,7 @@ def extractByType (ty : Expr) : List Expr → MetaM (List Expr)
       return l'
 
 
-partial def parseLinarithStructure (ty : Expr) (cfg : LinarithConfig := {})
+partial def parseLinarithStructure (ty : Expr) (cfg : MaximizeConfig := {})
     (g : MVarId) : MetaM (List Comp × ℕ) := g.withContext do
 
   let hyps := (← getLocalHyps).toList
