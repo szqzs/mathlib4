@@ -56,4 +56,20 @@ example {x y : ℚ} (h1 : 3 * x + y < 7) (h2 : x < 6) : True := by
   -- in this case should be unable to produce an upper bound, should give an error explaining this to the user
   sorry
 
+example {x y z : ℚ} (h1 : x + y < 7) (h2 : 3 * y + 4 * z < 2) (h3 : x - y + z < 1)
+  : True := by
+  maximize x - y + z as H
+  -- should have < 1
+  sorry
+
+example {x y z : ℚ} (h1 : x + y + z < 7)(h2 : x + 3 * y + 4 * z < 2)(h3 : x + 10 * y + z < 1)
+  : True := by
+  maximize x + 5 * y + 2 * z as H
+  -- should have < 28 / 9
+  sorry
+
+example {x y z : ℚ} (h1 : - x - 5 * y - 2 * z > 7) (h2 : x + 3 * y + 4 * z > 2)
+  (h3 : x + 10 * y + z > 1) : True := by
+  maximize - x - 5 * y - 2 * z as T
+  sorry
 --example {x y : ℚ} (h1 : 3 * x + 3 * y < 7)
