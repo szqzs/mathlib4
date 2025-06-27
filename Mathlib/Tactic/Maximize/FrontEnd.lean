@@ -1,5 +1,7 @@
 import Mathlib.Tactic.Linarith
 import Mathlib.Tactic.Maximize.Parsing
+import Mathlib.Tactic.Maximize.PositiveVectors
+import Mathlib.Tactic.Maximize.SimplexAlgorithm
 open Mathlib.Tactic
 
 open Lean
