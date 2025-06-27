@@ -4,14 +4,16 @@ import Mathlib.Tactic.Maximize.PositiveVectors
 import Mathlib.Tactic.Maximize.SimplexAlgorithm
 import Mathlib.Tactic.Polyrith
 import Mathlib.Data.Ineq
+
 open Mathlib
 open Mathlib.Tactic
-
 open Lean
 open Meta
 open Qq
 open Parser.Category
 open Elab
+open Tactic
+
 open Mathlib.Tactic.Linarith.SimplexAlgorithm
 open Mathlib.Tactic.Linarith
 open Mathlib.Tactic.Maximize
@@ -36,9 +38,7 @@ def preprocessS (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorithm matTy
   dbg_trace values
   (ofValues (values), strictIndexes)
 
--- This bestBound is the function that calls the work of the backend. It should take a list of
--- hypothesis rr and the term that is going to be maximized rH, and out put the ideal bound for the
--- maximization problem. Currently, the bound is 7 no matter what rr and rH is.
+
 def bestBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ) :
     MetaM (TSyntax `term) := do
   trace[debug] "there are {n} atoms"
@@ -47,7 +47,6 @@ def bestBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ) :
   let r ← findPositiveVectorS A strictIndexes
   return quote (-r)
 
-open Elab Tactic
 elab "maximize" e_stx:term "as" h_stx:ident : tactic => do
   let e_exp : Expr ← Elab.Tactic.elabTerm e_stx none
   let ⟨u, ty, e_exp⟩ ← inferTypeQ' e_exp -- `ty : Q(Type u)`, `e_exp : Q($ty)`
