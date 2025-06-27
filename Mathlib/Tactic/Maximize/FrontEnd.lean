@@ -47,7 +47,7 @@ def bestBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ) :
   let r ← findPositiveVectorS A strictIndexes
   return quote (-r)
 
-elab "maximize" e_stx:term "as" h_stx:ident : tactic => do
+elab "maximize" e_stx:term "with" h_stx:ident : tactic => do
   let e_exp : Expr ← Elab.Tactic.elabTerm e_stx none
   let ⟨u, ty, e_exp⟩ ← inferTypeQ' e_exp -- `ty : Q(Type u)`, `e_exp : Q($ty)`
   -- let ty ← inferType e_exp -- `ty : Expr`
@@ -78,57 +78,57 @@ elab "maximize" e_stx:term "as" h_stx:ident : tactic => do
 set_option linter.unusedVariables false
 
 example {x y : ℚ} (h1 : 3 * x + y < 4) (h2 : x < 2) : True := by
-  maximize 4 * x + y as H
+  maximize 4 * x + y with H
   -- should have 6
   trivial
 
 example {x y : ℚ} (h1 : 4 * x + 2 * y < 4) (h2 : x + y < 2) : True := by
-  maximize 5 * x + 3 * y as H
+  maximize 5 * x + 3 * y with H
   -- should have 6
   trivial
 
 example {x y : ℚ} (h1 : 3 * x + y ≤ 7) (h2 : x < 6) : True := by
-  maximize 5 * x + 3 * y as H
+  maximize 5 * x + 3 * y with H
   -- in this case should be unable to produce an upper bound,
   -- should give an error explaining this to the user
   sorry
 
 example {x y z : ℚ} (h1 : x + y < 7) (h2 : 3 * y + 4 * z < 2) (h3 : x - y + z < 1)
   : True := by
-  maximize x - y + z as H
+  maximize x - y + z with H
   -- should have 1
   trivial
 
 example {x y z : ℚ} (h1 : x + y + z < 7) (h2 : x + 3 * y + 4 * z < 2) (h3 : x + 10 * y + z < 1)
   : True := by
-  maximize x + 5 * y + 2 * z as H
+  maximize x + 5 * y + 2 * z with H
   -- should have 28 / 9
   trivial
 
 example {x y z : ℚ} (h1 : x + y + 2 * z > 7) (h2 : x + 3 * y + 4 * z > 2)
   (h3 : x + 10 * y + z > 1) : True := by
-  maximize - x - 5 * y - 2 * z as T
+  maximize - x - 5 * y - 2 * z with T
   -- should have - 18 /5
   trivial
 
 example {x y z w : ℚ} (h : x < 1) : True := by
-  maximize x as F
+  maximize x with F
   -- should have 1
   trivial
 
 example {x y : ℚ} (h1 : x + y < 10) (h2 : x + 11 * y < 9) : True := by
-  maximize x + 7 * y as H
+  maximize x + 7 * y with H
   -- should have 47 / 5
   trivial
 
 example {x y : ℚ} (h1 : -2 * x - y < 10) (h2 : -x - 11 * y < 9) : True
   := by
-    maximize - x - 7 * y as H
+    maximize - x - 7 * y with H
     -- should have 157 / 21
     trivial
 
 example {x y : ℚ} (h1 : -2 * x - y < 10) (h2 : -x - 11 * y < 9) :
 ∃ z : ℚ, (z < 157 / 20) ∧ (- x - 7 * y ≤ z)
   := by
-  maximize -x - 7 * y as H
+  maximize -x - 7 * y with H
   exact ⟨157 / 21, by linarith, H⟩
