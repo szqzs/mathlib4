@@ -2,20 +2,50 @@ import Mathlib.Tactic.Linarith
 import Mathlib.Tactic.Maximize.Parsing
 import Mathlib.Tactic.Maximize.PositiveVectors
 import Mathlib.Tactic.Maximize.SimplexAlgorithm
+import Mathlib.Tactic.Polyrith
+import Mathlib.Data.Ineq
+open Mathlib
 open Mathlib.Tactic
 
 open Lean
 open Meta
 open Qq
 open Parser.Category
+open Elab
+open Mathlib.Tactic.Linarith.SimplexAlgorithm
+open Mathlib.Tactic.Linarith
+open Mathlib.Tactic.Maximize
+
+def preprocessS (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorithm matType] (rH : Linarith.Comp)
+    (rr : List Linarith.Comp) (maxVar : ℕ) : matType (maxVar + 1) (rr.length + 1) × List Nat :=
+  dbg_trace "rH length is {rr.length}"
+  let hyps := rr ++ [rH]
+  let values : List (ℕ × ℕ × ℚ) := hyps.foldlIdx (init := []) fun idx cur comp =>
+    if idx == rr.length then
+      -- special handling for the goal
+      cur ++ comp.coeffs.map fun (var, c) =>
+        (var, idx, c * -1)  -- goal
+    else if idx == rr.length - 1 then
+      cur ++ comp.coeffs.map fun (var, c) =>
+        (var, 0, c)  -- let -1 < 0 be the first column
+    else
+      -- normal handling for all other rows
+      cur ++ comp.coeffs.map fun (var, c) =>
+        (var, idx + 1, c)
+  let strictIndexes := hyps.findIdxs (·.str == Ineq.lt)
+  dbg_trace values
+  (ofValues (values), strictIndexes)
 
 -- This bestBound is the function that calls the work of the backend. It should take a list of
 -- hypothesis rr and the term that is going to be maximized rH, and out put the ideal bound for the
 -- maximization problem. Currently, the bound is 7 no matter what rr and rH is.
-def bestBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ) : MetaM (TSyntax `term) := do
+def bestBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ) :
+    MetaM (TSyntax `term) := do
   trace[debug] "there are {n} atoms"
   trace[debug] "maximizing {rH}, hypotheses are {rr}"
-  `(7)
+  let (A, strictIndexes) := preprocessS DenseMatrix rH rr n
+  let r ← findPositiveVectorS A strictIndexes
+  return quote (-r)
 
 open Elab Tactic
 elab "maximize" e_stx:term "as" h_stx:ident : tactic => do
