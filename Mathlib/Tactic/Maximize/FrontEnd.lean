@@ -93,7 +93,7 @@ example {x y z : ℚ} (h1 : x + y + z < 7)(h2 : x + 3 * y + 4 * z < 2)(h3 : x + 
   -- should have < 28 / 9
   sorry
 
-example {x y z : ℚ} (h1 : - x - 5 * y - 2 * z > 7) (h2 : x + 3 * y + 4 * z > 2)
+example {x y z : ℚ} (h1 : x + y + 2 * z > 7) (h2 : x + 3 * y + 4 * z > 2)
   (h3 : x + 10 * y + z > 1) : True := by
   maximize - x - 5 * y - 2 * z as T
   -- should have < - 18 /5
@@ -108,3 +108,9 @@ example {x y : ℚ} (h1 : x + y < 10) (h2 : x + 11 * y < 9) : True := by
   maximize x + 7 * y as H
   -- should have < 47 / 5
   sorry
+
+example {x y :ℚ} (h1 : - 2 * x - y < 10) (h2 : - x - 11 * y < 9) : True
+  := by
+    maximize - x - 7 * y as H
+    -- should have 157 / 21
+    sorry
