@@ -75,16 +75,17 @@ elab "maximize" e_stx:term "as" h_stx:ident : tactic => do
 
 
 set_option trace.debug true
+set_option linter.unusedVariables false
 
 example {x y : ℚ} (h1 : 3 * x + y < 4) (h2 : x < 2) : True := by
   maximize 4 * x + y as H
   -- should have 6
-  sorry
+  trivial
 
 example {x y : ℚ} (h1 : 4 * x + 2 * y < 4) (h2 : x + y < 2) : True := by
   maximize 5 * x + 3 * y as H
   -- should have 6
-  sorry
+  trivial
 
 example {x y : ℚ} (h1 : 3 * x + y ≤ 7) (h2 : x < 6) : True := by
   maximize 5 * x + 3 * y as H
@@ -96,32 +97,32 @@ example {x y z : ℚ} (h1 : x + y < 7) (h2 : 3 * y + 4 * z < 2) (h3 : x - y + z 
   : True := by
   maximize x - y + z as H
   -- should have 1
-  sorry
+  trivial
 
-example {x y z : ℚ} (h1 : x + y + z < 7)(h2 : x + 3 * y + 4 * z < 2)(h3 : x + 10 * y + z < 1)
+example {x y z : ℚ} (h1 : x + y + z < 7) (h2 : x + 3 * y + 4 * z < 2) (h3 : x + 10 * y + z < 1)
   : True := by
   maximize x + 5 * y + 2 * z as H
   -- should have 28 / 9
-  sorry
+  trivial
 
 example {x y z : ℚ} (h1 : x + y + 2 * z > 7) (h2 : x + 3 * y + 4 * z > 2)
   (h3 : x + 10 * y + z > 1) : True := by
   maximize - x - 5 * y - 2 * z as T
   -- should have - 18 /5
-  sorry
+  trivial
 
 example {x y z w : ℚ} (h : x < 1) : True := by
   maximize x as F
   -- should have 1
-  sorry
+  trivial
 
 example {x y : ℚ} (h1 : x + y < 10) (h2 : x + 11 * y < 9) : True := by
   maximize x + 7 * y as H
   -- should have 47 / 5
-  sorry
+  trivial
 
-example {x y :ℚ} (h1 : - 2 * x - y < 10) (h2 : - x - 11 * y < 9) : True
+example {x y : ℚ} (h1 : -2 * x - y < 10) (h2 : -x - 11 * y < 9) : True
   := by
     maximize - x - 7 * y as H
     -- should have 157 / 21
-    sorry
+    trivial
