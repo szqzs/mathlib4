@@ -20,7 +20,7 @@ open Mathlib.Tactic.Maximize
 
 def preprocessS (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorithm matType] (rH : Linarith.Comp)
     (rr : List Linarith.Comp) (maxVar : ℕ) : matType (maxVar + 1) (rr.length + 1) × List Nat :=
-  dbg_trace "rH length is {rr.length}"
+  -- dbg_trace "rH length is {rr.length}"
   let hyps := rr ++ [rH]
   let values : List (ℕ × ℕ × ℚ) := hyps.foldlIdx (init := []) fun idx cur comp =>
     if idx == rr.length then
@@ -35,7 +35,7 @@ def preprocessS (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorithm matTy
       cur ++ comp.coeffs.map fun (var, c) =>
         (var, idx + 1, c)
   let strictIndexes := hyps.findIdxs (·.str == Ineq.lt)
-  dbg_trace values
+  -- dbg_trace values
   (ofValues (values), strictIndexes)
 
 
@@ -73,8 +73,8 @@ elab "maximize" e_stx:term "as" h_stx:ident : tactic => do
   -- Execute the tactic
   Elab.Tactic.evalTactic tacticStx
 
-
-set_option trace.debug true
+/-Below are the test examples-/
+-- set_option trace.debug true
 set_option linter.unusedVariables false
 
 example {x y : ℚ} (h1 : 3 * x + y < 4) (h2 : x < 2) : True := by
