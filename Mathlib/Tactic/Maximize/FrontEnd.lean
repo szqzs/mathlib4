@@ -126,3 +126,9 @@ example {x y : ℚ} (h1 : -2 * x - y < 10) (h2 : -x - 11 * y < 9) : True
     maximize - x - 7 * y as H
     -- should have 157 / 21
     trivial
+
+example {x y : ℚ} (h1 : -2 * x - y < 10) (h2 : -x - 11 * y < 9) :
+∃ z : ℚ, (z < 157 / 20) ∧ (- x - 7 * y ≤ z)
+  := by
+  maximize -x - 7 * y as H
+  exact ⟨157 / 21, by linarith, H⟩
