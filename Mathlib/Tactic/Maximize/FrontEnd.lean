@@ -59,8 +59,14 @@ elab "maximize" e_stx:term "as" h_stx:ident : tactic => do
   let (r, n) ← Mathlib.Tactic.Maximize.parseLinarithStructure ty H (← getMainGoal)
   -- This step splits off the goal vector rH from the matrix r and leave the hypothesis matrix rr
   let rH :: rr := r.reverse | failure
-  let bound ← bestBound rH rr n
-    -- Create the tactic syntax with explicit formatting
+  -- Wrap the bound computation in try-catch
+  let bound ← try
+    bestBound rH rr n
+  catch e =>
+    -- Check if it's a SimplexAlgorithm failure or similar
+    throwError "maximize: an upper bound cannot be produced for {e_stx}.
+    The constraints may be inconsistent or the expression may be unbounded."
+  -- Create the tactic syntax with explicit formatting
   let tacticStx ← `(tactic| have $h_stx : $e_stx ≤ $bound := by linarith)
   -- Add suggestion using getRef for current tactic position
   Lean.Meta.Tactic.TryThis.addSuggestion (← getRef) tacticStx (header := "Try this:")
