@@ -1,6 +1,5 @@
 import Mathlib.Tactic.Linarith
 import Mathlib.Tactic.Maximize.Parsing
--- import Mathlib
 open Mathlib.Tactic
 
 open Lean
@@ -45,9 +44,10 @@ example {x y : ℚ} (h1 : 4 * x + 2 * y < 4) (h2 : x + y < 2) : True := by
   -- should have < 6
   sorry
 
-example {x y : ℚ} (h1 : 3 * x + y < 7) (h2 : x < 6) : True := by
+example {x y : ℚ} (h1 : 3 * x + y ≤ 7) (h2 : x < 6) : True := by
   maximize 5 * x + 3 * y as H
-  -- in this case should be unable to produce an upper bound, should give an error explaining this to the user
+  -- in this case should be unable to produce an upper bound,
+  -- should give an error explaining this to the user
   sorry
 
 example {x y z : ℚ} (h1 : x + y < 7) (h2 : 3 * y + 4 * z < 2) (h3 : x - y + z < 1)
