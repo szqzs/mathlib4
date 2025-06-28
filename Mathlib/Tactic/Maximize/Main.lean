@@ -247,14 +247,6 @@ def runSimplexAlgorithmS : SimplexAlgorithmM matType (Rat) := do
 
 -- ========== POSITIVE VECTOR FINDING ==========
 
-
-/-- Extracts target vector from the tableau, putting auxiliary variables aside. -/
-def extractSolution (tableau : Tableau matType) : Array Rat := Id.run do
-  let mut ans : Array Rat := Array.replicate (tableau.basic.size + tableau.free.size - 3) 0
-  for h : i in [1:tableau.basic.size] do
-    ans := ans.set! (tableau.basic[i] - 2) <| tableau.mat[(i, tableau.free.size - 1)]!
-  return ans
-
 /--
 Finds a nonnegative vector `v`, such that `A v = 0` and some of its coordinates from
 `strictCoords` are positive, in the case such `v` exists. If not, throws the error. The latter
