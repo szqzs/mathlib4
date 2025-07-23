@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Robert Y. Lewis
 -/
 import Mathlib.Tactic.Linarith.Datatypes
+import Mathlib.Tactic.Linarith.TypeUtils
 import Mathlib.Tactic.Zify
 import Mathlib.Tactic.CancelDenoms.Core
 import Mathlib.Control.Basic
@@ -99,8 +100,10 @@ open Zify
 `isNatProp tp` is true iff `tp` is an inequality or equality between natural numbers
 or the negation thereof.
 -/
-partial def isNatProp (e : Expr) : MetaM Bool := succeeds <| do
-  let (_, _, .const ``Nat [], _, _) ← e.ineqOrNotIneq? | failure
+partial def isNatProp (e : Expr) : MetaM Bool := do
+  match ← typeOfComparisonExpr e with
+  | some (.const ``Nat []) => return true
+  | _ => return false
 
 /-- If `e` is of the form `((n : ℕ) : C)`, `isNatCoe e` returns `⟨n, C⟩`. -/
 def isNatCoe (e : Expr) : Option (Expr × Expr) :=

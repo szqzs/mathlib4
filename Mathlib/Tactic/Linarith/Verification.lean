@@ -162,6 +162,37 @@ def proveEqZeroUsing (tac : TacticM Unit) (e : Expr) : MetaM Expr := do
   let _h : Q(Zero $α) ← synthInstanceQ q(Zero $α)
   synthesizeUsing' q($e = 0) tac
 
+/-! #### Helper methods -/
+
+/-- Extract linear coefficients from a list of inequality proofs.
+This is the shared preprocessing logic used by both `linarith` and linear optimization tactics.
+Given a list of inequality proofs, it:
+1. Adds negated equality proofs via `addNegEqProofs`
+2. Adds a proof of `-1 < 0` via `mkNegOneLtZeroProof`
+3. Extracts linear forms and maximum variable index via `linearFormsAndMaxVar`
+
+This function was extracted from `proveFalseByLinarith` to allow code sharing with
+optimization tactics.
+-/
+def getCoeffs (transparency : TransparencyMode) : MVarId → List Expr → MetaM (List Comp × ℕ)
+  | _, [] => throwError "no args to linarith"
+  | _, l@(h::_) => do
+      Lean.Core.checkSystem decl_name%.toString
+      -- For the elimination to work properly, we must add a proof of `-1 < 0` to the list,
+      -- along with negated equality proofs.
+      let l' ← detailTrace "addNegEqProofs" <| addNegEqProofs l
+      let inputs ← detailTrace "mkNegOneLtZeroProof" <|
+        return (← mkNegOneLtZeroProof (← typeOfIneqProof h))::l'.reverse
+      trace[linarith.detail] "inputs:{indentD <| toMessageData (← inputs.mapM inferType)}"
+      let (comps, maxVar) ← detailTrace "linearFormsAndMaxVar" <|
+        linearFormsAndMaxVar transparency inputs
+      trace[linarith.detail] "comps:{indentD <| toMessageData comps}"
+      return (comps, maxVar)
+where
+  /-- Log `f` under `linarith.detail`, with exception emojis and the provided name. -/
+  detailTrace {α} (s : String) (f : MetaM α) : MetaM α :=
+    withTraceNode `linarith.detail (return m!"{exceptEmoji ·} {s}") f
+
 /-! #### The main method -/
 
 /--
@@ -187,20 +218,16 @@ tactic, which is typically `ring`. We prove (2) by folding over the set of hypot
 
 `transparency : TransparencyMode` controls the transparency level with which atoms are identified.
 -/
+
 def proveFalseByLinarith (transparency : TransparencyMode) (oracle : CertificateOracle)
     (discharger : TacticM Unit) : MVarId → List Expr → MetaM Expr
   | _, [] => throwError "no args to linarith"
   | g, l@(h::_) => do
-      Lean.Core.checkSystem decl_name%.toString
-      -- for the elimination to work properly, we must add a proof of `-1 < 0` to the list,
-      -- along with negated equality proofs.
-      let l' ← detailTrace "addNegEqProofs" <| addNegEqProofs l
-      let inputs ← detailTrace "mkNegOneLtZeroProof" <|
-        return (← mkNegOneLtZeroProof (← typeOfIneqProof h))::l'.reverse
-      trace[linarith.detail] "inputs:{indentD <| toMessageData (← inputs.mapM inferType)}"
-      let (comps, max_var) ← detailTrace "linearFormsAndMaxVar" <|
-        linearFormsAndMaxVar transparency inputs
-      trace[linarith.detail] "comps:{indentD <| toMessageData comps}"
+      -- Extract coefficients using the shared preprocessing logic
+      let (comps, max_var) ← getCoeffs transparency g l
+      -- Reconstruct inputs for proof construction (needed for certificate application)
+      let l' ← addNegEqProofs l
+      let inputs := (← mkNegOneLtZeroProof (← typeOfIneqProof h))::l'.reverse
       -- perform the elimination and fail if no contradiction is found.
       let certificate : Std.HashMap Nat Nat ←
         withTraceNode `linarith (return m!"{exceptEmoji ·} Invoking oracle") do
