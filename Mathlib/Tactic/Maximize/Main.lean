@@ -107,7 +107,8 @@ section SimplexAlgorithm
 
 -- Re-export simplex algorithm types and functions
 open Mathlib.Tactic.Linarith.SimplexAlgorithm (SimplexAlgorithmException SimplexAlgorithmM)
-open Mathlib.Tactic.Linarith.SimplexAlgorithm (doPivotOperation chooseEnteringVar chooseExitingVar choosePivots)
+open Mathlib.Tactic.Linarith.SimplexAlgorithm (doPivotOperation chooseEnteringVar chooseExitingVar
+  choosePivots)
 
 variable {matType : Nat → Nat → Type} [UsableInSimplexAlgorithm matType]
 
