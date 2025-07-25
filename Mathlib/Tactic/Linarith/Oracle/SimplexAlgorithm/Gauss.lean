@@ -24,18 +24,26 @@ def findNonzeroRow (rowStart col : Nat) : GaussM n m matType <| Option Nat := do
   let mat ← get
   let lastCol := m - 1  -- RHS column
   
-  -- First pass: look for pivots that give feasible basic variables (rhs/pivot >= 0)
+  -- Collect all nonzero candidates
+  let mut candidates : Array Nat := #[]
   for i in [rowStart:n] do
     if mat[(i, col)]! != 0 then
-      let pivot := mat[(i, col)]!
-      let rhs := -mat[(i, lastCol)]!  -- Matrix stores -1 * actual RHS
-      let basicVarValue := rhs / pivot
-      if basicVarValue >= 0 then
-        return i
+      candidates := candidates.push i
   
-  -- CRITICAL: If no feasible pivot exists, return .none to skip this column
-  -- This prevents choosing pivots that would cause negative basic variables
-  return .none
+  if candidates.isEmpty then
+    return .none
+  
+  -- First pass: prefer pivots that give feasible basic variables (rhs/pivot >= 0)
+  for i in candidates do
+    let pivot := mat[(i, col)]!
+    let rhs := -mat[(i, lastCol)]!  -- Matrix stores -1 * actual RHS
+    let basicVarValue := rhs / pivot
+    if basicVarValue >= 0 then
+      return i
+  
+  -- Second pass: if no feasible pivot exists, use the first available to maintain correctness
+  -- This prevents skipping columns entirely which can lead to incorrect solutions
+  return candidates[0]!
 
 /-- Implementation of `getTableau` in `GaussM` monad. -/
 def getTableauImp : GaussM n m matType <| Tableau matType := do

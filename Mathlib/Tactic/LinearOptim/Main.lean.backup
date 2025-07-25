@@ -12,7 +12,6 @@ import Mathlib.Tactic.Linarith.Verification
 import Mathlib.Tactic.Polyrith
 import Mathlib.Tactic.Ring.Basic
 import Mathlib.Util.Qq
-import Mathlib.Tactic.CancelDenoms.Core
 
 /-!
 # Linear Optimization Tactics
@@ -63,7 +62,10 @@ The preprocessors are run sequentially: each receives the output of the previous
 Note that a preprocessor may produce multiple or no expressions from each input expression,
 so the size of the list may change. -/
 def preprocess (pps : List Preprocessor) (l : List Expr) : MetaM (List Expr) := do
+  -- [DEBUG-TEMP] Debug preprocessing input
+  trace[debug] "[DEBUG-TEMP] preprocess: Input expressions: {l.length}"
   let result ← pps.foldlM (init := l) fun ls pp => pp.globalize.transform ls
+  trace[debug] "[DEBUG-TEMP] preprocess: Output expressions: {result.length}"
   return result
 
 /-- Extract expressions from a list that have the specified type. -/
@@ -92,41 +94,20 @@ def getCoeffs (transparency : TransparencyMode) : MVarId → List Expr → MetaM
       trace[linarith.detail] "comps:{indentD <| toMessageData comps}"
       return (comps, maxVar)
 
-/-- Extract the scaling factor that CancelDenoms applies to the goal expression.
-Returns 1 if no scaling is applied. -/
-def extractGoalScalingFactor (H : Expr) : MetaM ℕ := do
-  try
-    -- Check if the goal expression contains division
-    let goalType ← inferType H
-    let (_, lhs) ← parseCompAndExpr goalType
-    let containsDiv := lhs.containsConst fun n =>
-      n = ``HDiv.hDiv || n = ``Div.div || n = ``Inv.inv || n == ``OfScientific.ofScientific
-    
-    if containsDiv then
-      -- Apply the same CancelDenoms.derive logic to extract scaling factor
-      let (scalingFactor, _) ← CancelDenoms.derive lhs
-      trace[debug] "Goal scaling factor extracted: {scalingFactor}"
-      return scalingFactor
-    else
-      return 1
-  catch _ =>
-    -- If any error occurs, assume no scaling
-    return 1
-
-/-- Parse the linarith structure by turning hypotheses and goal into a matrix.
-Returns (List Comp, ℕ, ℕ) where the third component is the scaling factor applied to the goal. -/
+/-- Parse the linarith structure by turning hypotheses and goal into a matrix. -/
 partial def parseLinarithStructure (ty H : Expr) (g : MVarId)
-    (cfg : TransparencyMode := .reducible) : MetaM (List Comp × ℕ × ℕ) := g.withContext do
+    (cfg : TransparencyMode := .reducible) : MetaM (List Comp × ℕ) := g.withContext do
+  -- [DEBUG-TEMP] Debug parsing input
+  trace[debug] "[DEBUG-TEMP] parseLinarithStructure: Starting parsing"
   let hyps := H :: (← getLocalHyps).toList
-  
-  -- Extract scaling factor from goal before preprocessing
-  let goalScalingFactor ← extractGoalScalingFactor H
-  
+  trace[debug] "[DEBUG-TEMP] parseLinarithStructure: Total hyps: {hyps.length}"
   let es ← preprocess defaultPreprocessors hyps
   let hypSet ← extractByType ty es
+  trace[debug] "[DEBUG-TEMP] parseLinarithStructure: Extracted hypSet: {hypSet.length}"
   -- This getCoeffs is the key function in this definition
-  let (comps, maxVar) ← getCoeffs cfg g hypSet
-  return (comps, maxVar, goalScalingFactor)
+  let r ← getCoeffs cfg g hypSet
+  trace[debug] "[DEBUG-TEMP] parseLinarithStructure: getCoeffs completed, result size: {r.1.length}"
+  return r
 
 end Preprocessing
 
@@ -142,29 +123,41 @@ variable {matType : Nat → Nat → Type} [UsableInSimplexAlgorithm matType]
 /-- Check if the solution is found: the objective function is positive and all basic variables are
 nonnegative. -/
 def checkSuccess : SimplexAlgorithmM matType Bool := do
+  trace[debug] "[DEBUG-TEMP] checkSuccess: Starting success check"
   let tableau ← get
   trace[debug] "checkSuccess: Current matrix is {getValues tableau.mat}"
   let lastIdx := tableau.free.size - 1
+  trace[debug] "[DEBUG-TEMP] checkSuccess: lastIdx = {lastIdx}, basic.size = {tableau.basic.size}"
   -- First check feasibility: all basic variables must be non-negative
   -- check last column
+  trace[debug] "[DEBUG-TEMP] checkSuccess: Starting feasibility check"
   let feasible ← tableau.basic.size.allM (fun i _ => do
     if i ≠ 0 then
       let val := tableau.mat[(i, lastIdx)]!
+      trace[debug] "[DEBUG-TEMP] checkSuccess: Checking basic var {i}: value = {val}"
       return val ≥ 0
     else
+      trace[debug] "[DEBUG-TEMP] checkSuccess: Skipping row 0 in feasibility check"
       return true
     )
+  trace[debug] "[DEBUG-TEMP] checkSuccess: Feasibility check result: {feasible}"
   if not feasible then
+    trace[debug] "[DEBUG-TEMP] checkSuccess: FAILED - not feasible, returning false"
     return false
   -- Check optimality: all reduced costs should be ≤ 0 for maximization
   -- (Skip the last column which is RHS)
   -- check first row
+  trace[debug] "[DEBUG-TEMP] checkSuccess: Starting optimality check"
   let optimal ← tableau.free.size.allM (fun j _ => do
     if j == lastIdx then
+      trace[debug] "[DEBUG-TEMP] checkSuccess: Skipping RHS column {j}"
       return true  -- Skip RHS column
     else
       let val := tableau.mat[(0, j)]!
+      trace[debug] "[DEBUG-TEMP] checkSuccess: Checking reduced cost col {j}: value = {val}"
       return val ≤ 0)  -- All reduced costs ≤ 0
+  trace[debug] "[DEBUG-TEMP] checkSuccess: Optimality check result: {optimal}"
+  trace[debug] "[DEBUG-TEMP] checkSuccess: Final result: {optimal}"
   return optimal
 
 
@@ -174,15 +167,23 @@ def checkSuccess : SimplexAlgorithmM matType Bool := do
 /-- Runs the Simplex Algorithm inside the `SimplexAlgorithmM`. It always terminates, finding
 solution if such exists. -/
 def runSimplexAlgorithm : SimplexAlgorithmM matType (Rat) := do
+  trace[debug] "[DEBUG-TEMP] runSimplexAlgorithm: Starting simplex algorithm"
   let mut iteration : Nat := 0
   while !(← checkSuccess) do
     iteration := iteration + 1
+    trace[debug] "[DEBUG-TEMP] runSimplexAlgorithm: Iteration {iteration}"
     Lean.Core.checkSystem decl_name%.toString
+    trace[debug] "[DEBUG-TEMP] runSimplexAlgorithm: About to choosePivots"
     let ⟨exitIdx, enterIdx⟩ ← choosePivots
+    trace[debug] "[DEBUG-TEMP] runSimplexAlgorithm: Chosen pivots - exit: {exitIdx}, enter: {enterIdx}"
+    trace[debug] "[DEBUG-TEMP] runSimplexAlgorithm: About to doPivotOperation"
     doPivotOperation exitIdx enterIdx
+    trace[debug] "[DEBUG-TEMP] runSimplexAlgorithm: Completed pivot operation"
+  trace[debug] "[DEBUG-TEMP] runSimplexAlgorithm: Exited while loop, checkSuccess returned true"
   let tableau ← get
   let lastIdx := tableau.free.size - 1
   trace[debug] "entry is {tableau.mat[(0, lastIdx)]!}"
+  trace[debug] "[DEBUG-TEMP] runSimplexAlgorithm: Returning result: {tableau.mat[(0, lastIdx)]!}"
   return tableau.mat[(0, lastIdx)]!
 
 /-- Finds a nonnegative vector `v`, such that `A v = 0` and some of its coordinates from
@@ -194,13 +195,17 @@ def findPositiveVector {n m : Nat} {matType : Nat → Nat → Type}
   -- State the linear programming problem.
   -- Using Gaussian elimination split variable into free and basic forming the tableau
   -- that will be operated by the Simplex Algorithm.
+  trace[debug] "[DEBUG-TEMP] findPositiveVector: Starting Gaussian elimination"
   let initTableau ← Gauss.getTableau A
+  trace[debug] "[DEBUG-TEMP] findPositiveVector: Initial tableau created, running simplex"
   -- Run the Simplex Algorithm and extract the solution.
   let res ← runSimplexAlgorithm.run initTableau
   match res.fst with
   | .ok r =>
+    trace[debug] "[DEBUG-TEMP] findPositiveVector: Simplex succeeded with result: {r}"
     return r
   | .error _e =>
+    trace[debug] "[DEBUG-TEMP] findPositiveVector: Simplex failed with error"
     throwError "Simplex Algorithm failed"
 
 end SimplexAlgorithm
@@ -291,26 +296,24 @@ end MatrixPreprocessing
 section BoundComputation
 
 /-- Compute the best upper bound for maximization. -/
-def bestUpperBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ) (scalingFactor : ℕ) :
+def bestUpperBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ) :
     MetaM (TSyntax `term) := do
+  trace[debug] "[DEBUG-TEMP] bestUpperBound: Starting with {n} atoms"
+  trace[debug] "[DEBUG-TEMP] bestUpperBound: maximizing {rH}, hypotheses are {rr}"
   let (A, strictIndexes) := preprocessMaximize DenseMatrix rH rr n
+  trace[debug] "[DEBUG-TEMP] bestUpperBound: Matrix preprocessing complete, strictIndexes: {strictIndexes}"
   let r ← findPositiveVector A strictIndexes
-  -- Divide by scaling factor to get the correct bound for the original (unscaled) goal
-  let scaledR := if scalingFactor == 1 then r else r / scalingFactor
-  trace[debug] "Raw simplex result: {r}, scaling factor: {scalingFactor}, final bound: {scaledR}"
-  return quote (-scaledR)
+  trace[debug] "[DEBUG-TEMP] bestUpperBound: findPositiveVector returned: {r}"
+  return quote (-r)
 
 /-- Compute the best lower bound for minimization. -/
-def bestLowerBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ) (scalingFactor : ℕ) :
+def bestLowerBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ) :
     MetaM (TSyntax `term) := do
   trace[debug] "there are {n} atoms"
   trace[debug] "minimizing {rH}, hypotheses are {rr}"
   let (A, strictIndexes) := preprocessMinimize DenseMatrix rH rr n
   let r ← findPositiveVector A strictIndexes
-  -- Divide by scaling factor to get the correct bound for the original (unscaled) goal
-  let scaledR := if scalingFactor == 1 then r else r / scalingFactor
-  trace[debug] "Raw simplex result: {r}, scaling factor: {scalingFactor}, final bound: {scaledR}"
-  return quote scaledR
+  return quote r
 
 end BoundComputation
 
@@ -318,21 +321,27 @@ section TacticImplementation
 
 /-- The `maximize` tactic finds an upper bound for a linear expression. -/
 elab "maximize" e_stx:term "with" h_stx:ident : tactic => do
+  trace[debug] "[DEBUG-TEMP] maximize: Starting tactic for expression: {e_stx}"
   let e_exp : Expr ← Elab.Tactic.elabTerm e_stx none
   let ⟨u, ty, e_exp⟩ ← inferTypeQ' e_exp -- `ty : Q(Type u)`, `e_exp : Q($ty)`
   let _i ← synthInstanceQ q(PartialOrder $ty)
   let _i ← synthInstanceQ q(Semiring $ty)
   assumeInstancesCommute
   have H : Q($e_exp < 0) := q(sorry)
+  trace[debug] "[DEBUG-TEMP] maximize: About to parse linarith structure"
   -- Turn both the hypotheses and goal into a matrix r and a number n for atoms
-  let (r, n, scalingFactor) ← parseLinarithStructure ty H (← getMainGoal)
+  let (r, n) ← parseLinarithStructure ty H (← getMainGoal)
+  trace[debug] "[DEBUG-TEMP] maximize: parseLinarithStructure returned {r.length} components"
   -- Split off the goal vector rH from the matrix r and leave the hypothesis matrix rr
   let rH :: rr := r.reverse | failure
+  trace[debug] "[DEBUG-TEMP] maximize: About to call bestUpperBound"
   -- Wrap the bound computation in try-catch
   let bound ← try
-    bestUpperBound rH rr n scalingFactor
+    bestUpperBound rH rr n
   catch _e =>
+    trace[debug] "[DEBUG-TEMP] maximize: bestUpperBound failed with error"
     throwError "maximize: an upper bound cannot be produced for {e_stx}.\n    The constraints may be inconsistent or the expression may be unbounded."
+  trace[debug] "[DEBUG-TEMP] maximize: Successfully computed bound: {bound}"
   -- Create the tactic syntax with explicit formatting
   let tacticStx ← `(tactic| have $h_stx : $e_stx ≤ $bound := by linarith)
   -- Add suggestion using getRef for current tactic position
@@ -349,12 +358,12 @@ elab "minimize" e_stx:term "with" h_stx:ident : tactic => do
   assumeInstancesCommute
   have H : Q($e_exp < 0) := q(sorry)
   -- Turn both the hypotheses and goal into a matrix r and a number n for atoms
-  let (r, n, scalingFactor) ← parseLinarithStructure ty H (← getMainGoal)
+  let (r, n) ← parseLinarithStructure ty H (← getMainGoal)
   -- Split off the goal vector rH from the matrix r and leave the hypothesis matrix rr
   let rH :: rr := r.reverse | failure
   -- Wrap the bound computation in try-catch
   let bound ← try
-    bestLowerBound rH rr n scalingFactor
+    bestLowerBound rH rr n
   catch _e =>
     throwError "minimize: a lower bound cannot be produced for {e_stx}.
     The constraints may be inconsistent or the expression may be unbounded."

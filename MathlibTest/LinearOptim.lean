@@ -127,77 +127,67 @@ example (x y : Rat) (h : x < y) : x ≤ y := by
   maximize x - y with H
   linarith [H]
 
--- Tests with division that should fail (parsing issue: x/2 not recognized as (1/2)*x)
-/-- error: maximize: an upper bound cannot be produced for x / 2.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+-- Tests with division that now work correctly after scaling fix
+/-- info: Try this:have H : x / 2 ≤ 5 := by linarith -/
 #guard_msgs in
 example (x : Rat) (h1 : 0 < x) (h2 : x < 10) : x / 2 ≤ 5 := by
   maximize x / 2 with H
   exact H
 
-/-- error: maximize: an upper bound cannot be produced for ε / 2 + ε / 3.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+/-- info: Try this:have H : ε / 2 + ε / 3 ≤ 5 := by linarith -/
 #guard_msgs in
 example (ε : Rat) (h1 : 0 < ε) (h2 : ε < 6) : ε / 2 + ε / 3 ≤ 5 := by
   maximize ε / 2 + ε / 3 with H
   exact H
 
--- Test rational coefficient hypothesis: maximize may only handle integer coefficients
-/-- error: maximize: an upper bound cannot be produced for (1 / 2) * x.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+-- Test rational coefficient expressions (now work correctly)
+/-- info: Try this:have H : (1 / 2) * x ≤ 5 := by linarith -/
 #guard_msgs in
 example (x : Rat) (h1 : 0 < x) (h2 : x < 10) : (1 / 2) * x ≤ 5 := by
   maximize (1 / 2) * x with H
   exact H
 
-/-- error: maximize: an upper bound cannot be produced for (1 / 2) * ε + (1 / 3) * ε.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+/-- info: Try this:have H : (1 / 2) * ε + (1 / 3) * ε ≤ 5 := by linarith -/
 #guard_msgs in
 example (ε : Rat) (h1 : 0 < ε) (h2 : ε < 6) : (1 / 2) * ε + (1 / 3) * ε ≤ 5 := by
   maximize (1 / 2) * ε + (1 / 3) * ε with H
   exact H
 
--- Test with simpler rational coefficients
-/-- error: maximize: an upper bound cannot be produced for (1 / 1) * x.
-    The constraints may be inconsistent or the expression may be unbounded. -/
-#guard_msgs in  
+-- Test with simpler rational coefficients (now works)
+/-- info: Try this:have H : (1 / 1) * x ≤ 10 := by linarith -/
+#guard_msgs in
 example (x : Rat) (h1 : 0 < x) (h2 : x < 10) : (1 / 1) * x ≤ 10 := by
   maximize (1 / 1) * x with H
   exact H
 
--- Test with decimal representation
-/-- error: maximize: an upper bound cannot be produced for 0.5 * x.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+-- Test with decimal representation (now works with scaling)
+/-- info: Try this:have H : 0.5 * x ≤ 5 := by linarith -/
 #guard_msgs in
 example (x : Rat) (h1 : 0 < x) (h2 : x < 10) : 0.5 * x ≤ 5 := by
   maximize 0.5 * x with H
   exact H
 
 -- Test with strict inequality (should fail - no maximum exists)
-/-- error: maximize: an upper bound cannot be produced for 1 * x.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+/-- info: Try this:have H : 1 * x ≤ 10 := by linarith -/
 #guard_msgs in
 example (x : Rat) (h1 : 0 < x) (h2 : x < 10) : 1 * x ≤ 10 := by
   maximize 1 * x with H
   exact H
 
-/-- error: maximize: an upper bound cannot be produced for x.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+/-- info: Try this:have H : x ≤ 10 := by linarith -/
 #guard_msgs in
 example (x : Rat) (h1 : 0 < x) (h2 : x < 10) : x ≤ 10 := by
   maximize x with H
   exact H
 
--- Test with non-strict inequality (still fails - simple bounds don't work)
-/-- error: maximize: an upper bound cannot be produced for x.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+-- Test with non-strict inequality (now works)
+/-- info: Try this:have H : x ≤ 10 := by linarith -/
 #guard_msgs in
 example (x : Rat) (h1 : 0 < x) (h2 : x ≤ 10) : x ≤ 10 := by
   maximize x with H
   exact H
 
-/-- error: maximize: an upper bound cannot be produced for x / 2.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+/-- info: Try this:have H : x / 2 ≤ 5 := by linarith -/
 #guard_msgs in
 example (x : Rat) (h1 : 0 < x) (h2 : x ≤ 10) : x / 2 ≤ 5 := by
   maximize x / 2 with H
@@ -210,10 +200,10 @@ example (x y : Rat) (h1 : x + y < 10) (h2 : y > 4) : x ≤ 6 := by
   maximize x with H
   exact H
 
--- Test division with interacting constraints (WORKS! Division is fine with proper constraints)
-/-- info: Try this:have H : x / 2 ≤ 6 := by linarith -/
+-- Test division with interacting constraints (now with correct scaling)
+/-- info: Try this:have H : x / 2 ≤ 3 := by linarith -/
 #guard_msgs in
-example (x y : Rat) (h1 : x + y < 10) (h2 : y > 4) : x / 2 ≤ 6 := by
+example (x y : Rat) (h1 : x + y < 10) (h2 : y > 4) : x / 2 ≤ 3 := by
   maximize x / 2 with H
   exact H
 
@@ -225,7 +215,7 @@ example (x : Rat) (h1 : x > 0) : x ≤ 10 := by
   maximize x with H
   exact H
 
--- Test that should fail: unbounded minimize  
+-- Test that should fail: unbounded minimize
 /-- error: minimize: a lower bound cannot be produced for x.
     The constraints may be inconsistent or the expression may be unbounded. -/
 #guard_msgs in
@@ -278,18 +268,17 @@ example (x : Rat) (h1 : x > 0) (h2 : x < 10) (h3 : x > -5) : x ≤ 9 := by
   maximize x with H
   exact H
 
--- Test with division and constraint order
--- Case 1: Lower bound first, then upper bound with division (FAILS)
-/-- error: maximize: an upper bound cannot be produced for x / 2.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+-- Test with division and constraint order (both now work with scaling fix)
+-- Case 1: Lower bound first, then upper bound with division (now works)
+/-- info: Try this:have H : x / 2 ≤ 5 := by linarith -/
 #guard_msgs in
-example (x : Rat) (h1 : x > 0) (h2 : x < 10) : x / 2 ≤ 4 := by
+example (x : Rat) (h1 : x > 0) (h2 : x < 10) : x / 2 ≤ 5 := by
   maximize x / 2 with H
   exact H
 
--- Case 2: Upper bound first, then lower bound with division (WORKS!)
-/-- info: Try this:have H : x / 2 ≤ 10 := by linarith -/
+-- Case 2: Upper bound first, then lower bound with division (now with correct bound)
+/-- info: Try this:have H : x / 2 ≤ 5 := by linarith -/
 #guard_msgs in
-example (x : Rat) (h1 : x < 10) (h2 : x > 0) : x / 2 ≤ 10 := by
+example (x : Rat) (h1 : x < 10) (h2 : x > 0) : x / 2 ≤ 5 := by
   maximize x / 2 with H
   exact H
