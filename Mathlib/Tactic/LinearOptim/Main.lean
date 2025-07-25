@@ -122,17 +122,23 @@ def checkSuccess : SimplexAlgorithmM matType Bool := do
   -- check last column
   let feasible ← tableau.basic.size.allM (fun i _ => do
     if i ≠ 0 then
-      return tableau.mat[(i, lastIdx)]! ≥ 0
+      let val := tableau.mat[(i, lastIdx)]!
+      return val ≥ 0
     else
       return true
     )
-  if not feasible then return false
+  if not feasible then
+    return false
   -- Check optimality: all reduced costs should be ≤ 0 for maximization
   -- (Skip the last column which is RHS)
   -- check first row
-  tableau.free.size.allM (fun j _ => do
-    if j == lastIdx then return true  -- Skip RHS column
-    return tableau.mat[(0, j)]! ≤ 0)  -- All reduced costs ≤ 0
+  let optimal ← tableau.free.size.allM (fun j _ => do
+    if j == lastIdx then
+      return true  -- Skip RHS column
+    else
+      let val := tableau.mat[(0, j)]!
+      return val ≤ 0)  -- All reduced costs ≤ 0
+  return optimal
 
 
 
@@ -141,7 +147,9 @@ def checkSuccess : SimplexAlgorithmM matType Bool := do
 /-- Runs the Simplex Algorithm inside the `SimplexAlgorithmM`. It always terminates, finding
 solution if such exists. -/
 def runSimplexAlgorithm : SimplexAlgorithmM matType (Rat) := do
+  let mut iteration : Nat := 0
   while !(← checkSuccess) do
+    iteration := iteration + 1
     Lean.Core.checkSystem decl_name%.toString
     let ⟨exitIdx, enterIdx⟩ ← choosePivots
     doPivotOperation exitIdx enterIdx
@@ -163,33 +171,72 @@ def findPositiveVector {n m : Nat} {matType : Nat → Nat → Type}
   -- Run the Simplex Algorithm and extract the solution.
   let res ← runSimplexAlgorithm.run initTableau
   match res.fst with
-  | .ok r => return r
-  | .error _e => throwError "Simplex Algorithm failed"
+  | .ok r =>
+    return r
+  | .error _e =>
+    throwError "Simplex Algorithm failed"
 
 end SimplexAlgorithm
 
 section MatrixPreprocessing
 
-/-- Preprocessing for maximization: goal coefficients are negated. -/
-def preprocessMaximize (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorithm matType]
+-- Preprocessing testing for maximization: goal coefficients are negated.
+def preprocessMaximizeTest (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorithm matType]
     (rH : Linarith.Comp) (rr : List Linarith.Comp) (maxVar : ℕ) :
-    matType (maxVar + 1) (rr.length + 1) × List Nat :=
+    matType (maxVar + 1) (rr.length + 2) × List Nat :=
   let hyps := rr ++ [rH]
+
+
   let values : List (ℕ × ℕ × ℚ) :=
-    hyps.foldlIdx (init := []) fun idx cur comp =>
-    if idx == rr.length then
-      -- Special handling for the goal (maximize: negate coefficients)
-      cur ++ comp.coeffs.map fun (var, c) =>
-        (var, idx, c * -1)  -- goal
-    else if idx == rr.length - 1 then
-      cur ++ comp.coeffs.map fun (var, c) =>
-        (var, 0, c)  -- let -1 < 0 be the first column
-    else
-      -- Normal handling for all other rows
-      cur ++ comp.coeffs.map fun (var, c) =>
-        (var, idx + 1, c)
+      hyps.foldlIdx (init := []) fun idx cur comp =>
+      if idx == rr.length then
+         -- Special handling for the goal (maximize: negate coefficients)
+        let goalCoeffs := comp.coeffs.map fun (var, c) =>
+          (var, idx + 1, c * -1)  -- goal in column idx + 1
+        -- add the second column as auxiliary column to ensure non-negativity of
+        -- initial basic variables
+        let auxCoeffs : List (ℕ × ℕ × ℚ) := comp.coeffs.map fun (var, c) =>
+          if var == 0 then
+            (var, 1, 0)  -- auxiliary column entry for goal row (0 value) ensures
+            -- that the auxiliary variables has no influence on the goal
+          else
+            (var, 1, c)  -- goal in column idx + 1
+        cur ++ goalCoeffs ++ auxCoeffs
+
+      else if idx == rr.length - 1 then
+        cur ++ comp.coeffs.map fun (var, c) =>
+          (var, 0, c)  -- let the first column be (1,0,0,...)
+      else
+        -- Normal handling for all other rows
+        cur ++ comp.coeffs.map fun (var, c) =>
+          (var, idx + 2, c)
+      -- Claude: show cur in the matrix form. each entry (a,b,c) of cur means the value at row a and column b is c
+      -- note that some zero entries are omitted in cur
   let strictIndexes := hyps.findIdxs (·.str == Ineq.lt)
   (ofValues values, strictIndexes)
+
+
+ def preprocessMaximize (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorithm matType]
+      (rH : Linarith.Comp) (rr : List Linarith.Comp) (maxVar : ℕ) :
+      matType (maxVar + 1) (rr.length + 1) × List Nat :=
+    let hyps := rr ++ [rH]
+    let values : List (ℕ × ℕ × ℚ) :=
+      hyps.foldlIdx (init := []) fun idx cur comp =>
+      if idx == rr.length then
+        -- Special handling for the goal (maximize: negate coefficients)
+        cur ++ comp.coeffs.map fun (var, c) =>
+          (var, idx, c * -1)  -- goal
+      else if idx == rr.length - 1 then
+        cur ++ comp.coeffs.map fun (var, c) =>
+          (var, 0, c)  -- let -1 < 0 be the first column
+      else
+        -- Normal handling for all other rows
+        cur ++ comp.coeffs.map fun (var, c) =>
+          (var, idx + 1, c)
+      -- Claude: show cur in the matrix form. each entry (a,b,c) of cur means the value at row a and column b is c
+      -- note that some zero entries are omitted in cur
+    let strictIndexes := hyps.findIdxs (·.str == Ineq.lt)
+    (ofValues values, strictIndexes)
 
 /-- Preprocessing for minimization: goal coefficients are kept as-is. -/
 def preprocessMinimize (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorithm matType]
@@ -219,8 +266,6 @@ section BoundComputation
 /-- Compute the best upper bound for maximization. -/
 def bestUpperBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ) :
     MetaM (TSyntax `term) := do
-  trace[debug] "there are {n} atoms"
-  trace[debug] "maximizing {rH}, hypotheses are {rr}"
   let (A, strictIndexes) := preprocessMaximize DenseMatrix rH rr n
   let r ← findPositiveVector A strictIndexes
   return quote (-r)
@@ -254,8 +299,7 @@ elab "maximize" e_stx:term "with" h_stx:ident : tactic => do
   let bound ← try
     bestUpperBound rH rr n
   catch _e =>
-    throwError "maximize: an upper bound cannot be produced for {e_stx}.
-    The constraints may be inconsistent or the expression may be unbounded."
+    throwError "maximize: an upper bound cannot be produced for {e_stx}.\n    The constraints may be inconsistent or the expression may be unbounded."
   -- Create the tactic syntax with explicit formatting
   let tacticStx ← `(tactic| have $h_stx : $e_stx ≤ $bound := by linarith)
   -- Add suggestion using getRef for current tactic position
@@ -291,5 +335,3 @@ elab "minimize" e_stx:term "with" h_stx:ident : tactic => do
 end TacticImplementation
 
 end Mathlib.Tactic.LinearOptim
-
-
