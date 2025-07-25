@@ -31,19 +31,34 @@ def findNonzeroRow (rowStart col : Nat) : GaussM n m matType <| Option Nat := do
       candidates := candidates.push i
   
   if candidates.isEmpty then
+    trace[debug] "No nonzero candidates for column {col}"
     return .none
+  
+  trace[debug] "Column {col}: candidates {candidates.toList}, rowStart {rowStart}"
   
   -- First pass: prefer pivots that give feasible basic variables (rhs/pivot >= 0)
   for i in candidates do
     let pivot := mat[(i, col)]!
     let rhs := -mat[(i, lastCol)]!  -- Matrix stores -1 * actual RHS
     let basicVarValue := rhs / pivot
+    trace[debug] "Row {i}: pivot={pivot}, rhs={rhs}, basicVarValue={basicVarValue}"
     if basicVarValue >= 0 then
+      trace[debug] "Selected feasible pivot: row {i}"
       return i
   
-  -- Second pass: if no feasible pivot exists, use the first available to maintain correctness
-  -- This prevents skipping columns entirely which can lead to incorrect solutions
-  return candidates[0]!
+  -- Second pass: if no feasible pivot exists, decide whether to skip or use first candidate
+  -- Skip column only if we have enough remaining columns to process all rows
+  let remainingCols := m - col - 1  -- Exclude current column and last column (RHS)
+  let remainingRows := n - rowStart
+  
+  if remainingCols > remainingRows then
+    -- Safe to skip this column - we have more columns than rows remaining
+    trace[debug] "No feasible pivot found for column {col}, skipping (safe: {remainingCols} cols > {remainingRows} rows)"
+    return .none
+  else
+    -- Must use a pivot to avoid empty tableau
+    trace[debug] "No feasible pivot found for column {col}, using first candidate (needed: {remainingCols} cols ≤ {remainingRows} rows)"
+    return candidates[0]!
 
 /-- Implementation of `getTableau` in `GaussM` monad. -/
 def getTableauImp : GaussM n m matType <| Tableau matType := do

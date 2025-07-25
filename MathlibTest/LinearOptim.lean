@@ -238,11 +238,10 @@ example (x y : Rat) (h1 : x + y < 5) (h2 : x ≤ 3) : x + y ≤ 5 := by
   exact H
 
 -- CONSTRAINT ORDER DEPENDENCY TESTS
--- Case 1: Lower bound first, then upper bound (FAILS)
-/-- error: maximize: an upper bound cannot be produced for x.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+-- Case 1: Lower bound first, then upper bound (NOW WORKS with constraint ordering fix)
+/-- info: Try this:have H : x ≤ 10 := by linarith -/
 #guard_msgs in
-example (x : Rat) (h1 : x > 0) (h2 : x < 10) : x ≤ 9 := by
+example (x : Rat) (h1 : x > 0) (h2 : x < 10) : x ≤ 10 := by
   maximize x with H
   exact H
 
@@ -260,11 +259,10 @@ example (x : Rat) (h1 : x < 10) (h2 : x > 0) (h3 : x < 6) : x ≤ 6 := by
   maximize x with H
   exact H
 
--- Case 4: Lower, upper, lower again (test if it still fails)
-/-- error: maximize: an upper bound cannot be produced for x.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+-- Case 4: Lower, upper, lower again (NOW WORKS with constraint ordering fix)
+/-- info: Try this:have H : x ≤ 10 := by linarith -/
 #guard_msgs in
-example (x : Rat) (h1 : x > 0) (h2 : x < 10) (h3 : x > -5) : x ≤ 9 := by
+example (x : Rat) (h1 : x > 0) (h2 : x < 10) (h3 : x > -5) : x ≤ 10 := by
   maximize x with H
   exact H
 
