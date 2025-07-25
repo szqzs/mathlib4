@@ -96,21 +96,17 @@ def getCoeffs (transparency : TransparencyMode) : MVarId → List Expr → MetaM
 Returns 1 if no scaling is applied. -/
 def extractGoalScalingFactor (H : Expr) : MetaM ℕ := do
   try
-    -- Check if the goal expression contains division
     let goalType ← inferType H
     let (_, lhs) ← parseCompAndExpr goalType
     let containsDiv := lhs.containsConst fun n =>
       n = ``HDiv.hDiv || n = ``Div.div || n = ``Inv.inv || n == ``OfScientific.ofScientific
     
     if containsDiv then
-      -- Apply the same CancelDenoms.derive logic to extract scaling factor
       let (scalingFactor, _) ← CancelDenoms.derive lhs
-      trace[debug] "Goal scaling factor extracted: {scalingFactor}"
       return scalingFactor
     else
       return 1
   catch _ =>
-    -- If any error occurs, assume no scaling
     return 1
 
 /-- Parse the linarith structure by turning hypotheses and goal into a matrix.
@@ -118,13 +114,9 @@ Returns (List Comp, ℕ, ℕ) where the third component is the scaling factor ap
 partial def parseLinarithStructure (ty H : Expr) (g : MVarId)
     (cfg : TransparencyMode := .reducible) : MetaM (List Comp × ℕ × ℕ) := g.withContext do
   let hyps := H :: (← getLocalHyps).toList
-  
-  -- Extract scaling factor from goal before preprocessing
   let goalScalingFactor ← extractGoalScalingFactor H
-  
   let es ← preprocess defaultPreprocessors hyps
   let hypSet ← extractByType ty es
-  -- This getCoeffs is the key function in this definition
   let (comps, maxVar) ← getCoeffs cfg g hypSet
   return (comps, maxVar, goalScalingFactor)
 
@@ -139,14 +131,9 @@ open Mathlib.Tactic.Linarith.SimplexAlgorithm (doPivotOperation chooseEnteringVa
 
 variable {matType : Nat → Nat → Type} [UsableInSimplexAlgorithm matType]
 
-/-- Check if the solution is found: the objective function is positive and all basic variables are
-nonnegative. -/
 def checkSuccess : SimplexAlgorithmM matType Bool := do
   let tableau ← get
-  trace[debug] "checkSuccess: Current matrix is {getValues tableau.mat}"
   let lastIdx := tableau.free.size - 1
-  -- First check feasibility: all basic variables must be non-negative
-  -- check last column
   let feasible ← tableau.basic.size.allM (fun i _ => do
     if i ≠ 0 then
       let val := tableau.mat[(i, lastIdx)]!
@@ -156,15 +143,12 @@ def checkSuccess : SimplexAlgorithmM matType Bool := do
     )
   if not feasible then
     return false
-  -- Check optimality: all reduced costs should be ≤ 0 for maximization
-  -- (Skip the last column which is RHS)
-  -- check first row
   let optimal ← tableau.free.size.allM (fun j _ => do
     if j == lastIdx then
-      return true  -- Skip RHS column
+      return true
     else
       let val := tableau.mat[(0, j)]!
-      return val ≤ 0)  -- All reduced costs ≤ 0
+      return val ≤ 0)
   return optimal
 
 
@@ -182,7 +166,6 @@ def runSimplexAlgorithm : SimplexAlgorithmM matType (Rat) := do
     doPivotOperation exitIdx enterIdx
   let tableau ← get
   let lastIdx := tableau.free.size - 1
-  trace[debug] "entry is {tableau.mat[(0, lastIdx)]!}"
   return tableau.mat[(0, lastIdx)]!
 
 /-- Finds a nonnegative vector `v`, such that `A v = 0` and some of its coordinates from
@@ -207,61 +190,21 @@ end SimplexAlgorithm
 
 section MatrixPreprocessing
 
--- Preprocessing testing for maximization: goal coefficients are negated.
-def preprocessMaximizeTest (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorithm matType]
-    (rH : Linarith.Comp) (rr : List Linarith.Comp) (maxVar : ℕ) :
-    matType (maxVar + 1) (rr.length + 2) × List Nat :=
-  let hyps := rr ++ [rH]
-
-
-  let values : List (ℕ × ℕ × ℚ) :=
-      hyps.foldlIdx (init := []) fun idx cur comp =>
-      if idx == rr.length then
-         -- Special handling for the goal (maximize: negate coefficients)
-        let goalCoeffs := comp.coeffs.map fun (var, c) =>
-          (var, idx + 1, c * -1)  -- goal in column idx + 1
-        -- add the second column as auxiliary column to ensure non-negativity of
-        -- initial basic variables
-        let auxCoeffs : List (ℕ × ℕ × ℚ) := comp.coeffs.map fun (var, c) =>
-          if var == 0 then
-            (var, 1, 0)  -- auxiliary column entry for goal row (0 value) ensures
-            -- that the auxiliary variables has no influence on the goal
-          else
-            (var, 1, c)  -- goal in column idx + 1
-        cur ++ goalCoeffs ++ auxCoeffs
-
-      else if idx == rr.length - 1 then
-        cur ++ comp.coeffs.map fun (var, c) =>
-          (var, 0, c)  -- let the first column be (1,0,0,...)
-      else
-        -- Normal handling for all other rows
-        cur ++ comp.coeffs.map fun (var, c) =>
-          (var, idx + 2, c)
-      -- Claude: show cur in the matrix form. each entry (a,b,c) of cur means the value at row a and column b is c
-      -- note that some zero entries are omitted in cur
-  let strictIndexes := hyps.findIdxs (·.str == Ineq.lt)
-  (ofValues values, strictIndexes)
-
-
- def preprocessMaximize (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorithm matType]
+def preprocessMaximize (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorithm matType]
       (rH : Linarith.Comp) (rr : List Linarith.Comp) (maxVar : ℕ) :
       matType (maxVar + 1) (rr.length + 1) × List Nat :=
     let hyps := rr ++ [rH]
     let values : List (ℕ × ℕ × ℚ) :=
       hyps.foldlIdx (init := []) fun idx cur comp =>
       if idx == rr.length then
-        -- Special handling for the goal (maximize: negate coefficients)
         cur ++ comp.coeffs.map fun (var, c) =>
-          (var, idx, c * -1)  -- goal
+          (var, idx, c * -1)
       else if idx == rr.length - 1 then
         cur ++ comp.coeffs.map fun (var, c) =>
-          (var, 0, c)  -- let -1 < 0 be the first column
+          (var, 0, c)
       else
-        -- Normal handling for all other rows
         cur ++ comp.coeffs.map fun (var, c) =>
           (var, idx + 1, c)
-      -- Claude: show cur in the matrix form. each entry (a,b,c) of cur means the value at row a and column b is c
-      -- note that some zero entries are omitted in cur
     let strictIndexes := hyps.findIdxs (·.str == Ineq.lt)
     (ofValues values, strictIndexes)
 
@@ -273,14 +216,12 @@ def preprocessMinimize (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorith
   let values : List (ℕ × ℕ × ℚ) :=
     hyps.foldlIdx (init := []) fun idx cur comp =>
     if idx == rr.length then
-      -- Special handling for the goal (minimize: keep coefficients as-is)
       cur ++ comp.coeffs.map fun (var, c) =>
-        (var, idx, c)  -- goal
+        (var, idx, c)
     else if idx == rr.length - 1 then
       cur ++ comp.coeffs.map fun (var, c) =>
-        (var, 0, c)  -- let -1 < 0 be the first column
+        (var, 0, c)
     else
-      -- Normal handling for all other rows
       cur ++ comp.coeffs.map fun (var, c) =>
         (var, idx + 1, c)
   let strictIndexes := hyps.findIdxs (·.str == Ineq.lt)
@@ -295,21 +236,15 @@ def bestUpperBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ) (sca
     MetaM (TSyntax `term) := do
   let (A, strictIndexes) := preprocessMaximize DenseMatrix rH rr n
   let r ← findPositiveVector A strictIndexes
-  -- Divide by scaling factor to get the correct bound for the original (unscaled) goal
   let scaledR := if scalingFactor == 1 then r else r / scalingFactor
-  trace[debug] "Raw simplex result: {r}, scaling factor: {scalingFactor}, final bound: {scaledR}"
   return quote (-scaledR)
 
 /-- Compute the best lower bound for minimization. -/
 def bestLowerBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ) (scalingFactor : ℕ) :
     MetaM (TSyntax `term) := do
-  trace[debug] "there are {n} atoms"
-  trace[debug] "minimizing {rH}, hypotheses are {rr}"
   let (A, strictIndexes) := preprocessMinimize DenseMatrix rH rr n
   let r ← findPositiveVector A strictIndexes
-  -- Divide by scaling factor to get the correct bound for the original (unscaled) goal
   let scaledR := if scalingFactor == 1 then r else r / scalingFactor
-  trace[debug] "Raw simplex result: {r}, scaling factor: {scalingFactor}, final bound: {scaledR}"
   return quote scaledR
 
 end BoundComputation
@@ -332,7 +267,8 @@ elab "maximize" e_stx:term "with" h_stx:ident : tactic => do
   let bound ← try
     bestUpperBound rH rr n scalingFactor
   catch _e =>
-    throwError "maximize: an upper bound cannot be produced for {e_stx}.\n    The constraints may be inconsistent or the expression may be unbounded."
+    throwError "maximize: an upper bound cannot be produced for {e_stx}.\n    \
+      The constraints may be inconsistent or the expression may be unbounded."
   -- Create the tactic syntax with explicit formatting
   let tacticStx ← `(tactic| have $h_stx : $e_stx ≤ $bound := by linarith)
   -- Add suggestion using getRef for current tactic position

@@ -19,45 +19,33 @@ abbrev GaussM (n m : Nat) (matType : Nat → Nat → Type) := StateT (matType n 
 
 variable {n m : Nat} {matType : Nat → Nat → Type} [UsableInSimplexAlgorithm matType]
 
-/-- Enhanced findNonzeroRow that prefers feasible pivots for constraint ordering independence -/
 def findNonzeroRow (rowStart col : Nat) : GaussM n m matType <| Option Nat := do
   let mat ← get
-  let lastCol := m - 1  -- RHS column
+  let lastCol := m - 1
   
-  -- Collect all nonzero candidates
   let mut candidates : Array Nat := #[]
   for i in [rowStart:n] do
     if mat[(i, col)]! != 0 then
       candidates := candidates.push i
   
   if candidates.isEmpty then
-    trace[debug] "No nonzero candidates for column {col}"
     return .none
-  
-  trace[debug] "Column {col}: candidates {candidates.toList}, rowStart {rowStart}"
   
   -- First pass: prefer pivots that give feasible basic variables (rhs/pivot >= 0)
   for i in candidates do
     let pivot := mat[(i, col)]!
-    let rhs := -mat[(i, lastCol)]!  -- Matrix stores -1 * actual RHS
+    let rhs := -mat[(i, lastCol)]!
     let basicVarValue := rhs / pivot
-    trace[debug] "Row {i}: pivot={pivot}, rhs={rhs}, basicVarValue={basicVarValue}"
     if basicVarValue >= 0 then
-      trace[debug] "Selected feasible pivot: row {i}"
       return i
   
   -- Second pass: if no feasible pivot exists, decide whether to skip or use first candidate
-  -- Skip column only if we have enough remaining columns to process all rows
-  let remainingCols := m - col - 1  -- Exclude current column and last column (RHS)
+  let remainingCols := m - col - 1
   let remainingRows := n - rowStart
   
   if remainingCols > remainingRows then
-    -- Safe to skip this column - we have more columns than rows remaining
-    trace[debug] "No feasible pivot found for column {col}, skipping (safe: {remainingCols} cols > {remainingRows} rows)"
     return .none
   else
-    -- Must use a pivot to avoid empty tableau
-    trace[debug] "No feasible pivot found for column {col}, using first candidate (needed: {remainingCols} cols ≤ {remainingRows} rows)"
     return candidates[0]!
 
 /-- Implementation of `getTableau` in `GaussM` monad. -/
