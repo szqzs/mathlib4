@@ -167,7 +167,7 @@ example (x : Rat) (h1 : 0 < x) (h2 : x < 10) : 0.5 * x ≤ 5 := by
   maximize 0.5 * x with H
   exact H
 
--- Test with strict inequality (should fail - no maximum exists)
+-- Test with strict inequality (now works correctly after constraint ordering fix)
 /-- info: Try this:have H : 1 * x ≤ 10 := by linarith -/
 #guard_msgs in
 example (x : Rat) (h1 : 0 < x) (h2 : x < 10) : 1 * x ≤ 10 := by
