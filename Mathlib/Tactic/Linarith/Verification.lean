@@ -162,6 +162,34 @@ def proveEqZeroUsing (tac : TacticM Unit) (e : Expr) : MetaM Expr := do
   let _h : Q(Zero $α) ← synthInstanceQ q(Zero $α)
   synthesizeUsing' q($e = 0) tac
 
+/-! #### Coefficient extraction -/
+
+/--
+`getLinearCombinations transparency g l` extracts linear combinations from a list `l` of 
+inequality proofs, using the specified transparency mode.
+
+This function processes the proofs by adding negated equality proofs and a proof of `-1 < 0`,
+then converts them to linear combinations using `linearFormsAndMaxVar`.
+
+Returns `(comps, maxVar, inputs)` where:
+- `comps` is the list of linear combinations
+- `maxVar` is the maximum variable index used
+- `inputs` is the list of processed proof expressions
+-/
+def getLinearCombinations (transparency : TransparencyMode) :
+    MVarId → List Expr → MetaM (List Comp × ℕ × List Expr)
+  | _, [] => throwError "no args to linarith"
+  | _, l@(h::_) => do
+      Lean.Core.checkSystem decl_name%.toString
+      -- For the elimination to work properly, we must add a proof of `-1 < 0` to the list,
+      -- along with negated equality proofs.
+      let l' ← addNegEqProofs l
+      let inputs := (← mkNegOneLtZeroProof (← typeOfIneqProof h))::l'.reverse
+      trace[linarith.detail] "inputs:{indentD <| toMessageData (← inputs.mapM inferType)}"
+      let (comps, maxVar) ← linearFormsAndMaxVar transparency inputs
+      trace[linarith.detail] "comps:{indentD <| toMessageData comps}"
+      return (comps, maxVar, inputs)
+
 /-! #### The main method -/
 
 /--
@@ -190,17 +218,9 @@ tactic, which is typically `ring`. We prove (2) by folding over the set of hypot
 def proveFalseByLinarith (transparency : TransparencyMode) (oracle : CertificateOracle)
     (discharger : TacticM Unit) : MVarId → List Expr → MetaM Expr
   | _, [] => throwError "no args to linarith"
-  | g, l@(h::_) => do
-      Lean.Core.checkSystem decl_name%.toString
-      -- for the elimination to work properly, we must add a proof of `-1 < 0` to the list,
-      -- along with negated equality proofs.
-      let l' ← detailTrace "addNegEqProofs" <| addNegEqProofs l
-      let inputs ← detailTrace "mkNegOneLtZeroProof" <|
-        return (← mkNegOneLtZeroProof (← typeOfIneqProof h))::l'.reverse
-      trace[linarith.detail] "inputs:{indentD <| toMessageData (← inputs.mapM inferType)}"
-      let (comps, max_var) ← detailTrace "linearFormsAndMaxVar" <|
-        linearFormsAndMaxVar transparency inputs
-      trace[linarith.detail] "comps:{indentD <| toMessageData comps}"
+  | g, l => do
+      let (comps, max_var, inputs) ← detailTrace "getLinearCombinations" <|
+        getLinearCombinations transparency g l
       -- perform the elimination and fail if no contradiction is found.
       let certificate : Std.HashMap Nat Nat ←
         withTraceNode `linarith (return m!"{exceptEmoji ·} Invoking oracle") do

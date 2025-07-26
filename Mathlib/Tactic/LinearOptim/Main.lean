@@ -77,19 +77,10 @@ def extractByType (ty : Expr) : List Expr → MetaM (List Expr)
       return l'
 
 /-- `getCoeffs` extracts linear combinations from a list of inequality proofs.
-This is the core function that converts hypothesis proofs into the coefficient matrix
-needed for the simplex algorithm. -/
+This is a wrapper around linarith's `getLinearCombinations` that maintains API compatibility. -/
 def getCoeffs (transparency : TransparencyMode) : MVarId → List Expr → MetaM (List Comp × ℕ)
-  | _, [] => throwError "no args to linarith"
-  | _, l@(h::_) => do
-      Lean.Core.checkSystem decl_name%.toString
-      -- For the elimination to work properly, we must add a proof of `-1 < 0` to the list,
-      -- along with negated equality proofs.
-      let l' ← addNegEqProofs l
-      let inputs := (← mkNegOneLtZeroProof (← typeOfIneqProof h))::l'.reverse
-      trace[linarith.detail] "inputs:{indentD <| toMessageData (← inputs.mapM inferType)}"
-      let (comps, maxVar) ← linearFormsAndMaxVar transparency inputs
-      trace[linarith.detail] "comps:{indentD <| toMessageData comps}"
+  | g, l => do
+      let (comps, maxVar, _) ← Mathlib.Tactic.Linarith.getLinearCombinations transparency g l
       return (comps, maxVar)
 
 /-- Extract the scaling factor that CancelDenoms applies to the goal expression.
@@ -251,8 +242,20 @@ end BoundComputation
 
 section TacticImplementation
 
-/-- The `maximize` tactic finds an upper bound for a linear expression. -/
-elab "maximize" e_stx:term "with" h_stx:ident : tactic => do
+/--
+Common setup for linear optimization tactics.
+
+Handles type inference, instance synthesis, and parsing of the linear structure.
+Returns `(e_exp, ty, rH, rr, n, scalingFactor)` where:
+- `e_exp` is the elaborated expression
+- `ty` is the type of the expression  
+- `rH` is the goal vector (linear combination)
+- `rr` is the list of hypothesis vectors
+- `n` is the maximum variable index
+- `scalingFactor` is the scaling factor from `CancelDenoms`
+-/
+def setupLinearOptimTactic (e_stx : Term) :
+    TacticM (Expr × Expr × Linarith.Comp × List Linarith.Comp × ℕ × ℕ) := do
   let e_exp : Expr ← Elab.Tactic.elabTerm e_stx none
   let ⟨u, ty, e_exp⟩ ← inferTypeQ' e_exp -- `ty : Q(Type u)`, `e_exp : Q($ty)`
   let _i ← synthInstanceQ q(PartialOrder $ty)
@@ -263,6 +266,24 @@ elab "maximize" e_stx:term "with" h_stx:ident : tactic => do
   let (r, n, scalingFactor) ← parseLinarithStructure ty H (← getMainGoal)
   -- Split off the goal vector rH from the matrix r and leave the hypothesis matrix rr
   let rH :: rr := r.reverse | failure
+  return (e_exp, ty, rH, rr, n, scalingFactor)
+
+/--
+Common finalization for linear optimization tactics.
+
+Takes a generated tactic syntax and:
+1. Adds it as a "Try this:" suggestion to the info view
+2. Executes the tactic to complete the goal
+-/
+def finalizeTacticWithSuggestion (tacticStx : TSyntax `tactic) : TacticM Unit := do
+  -- Add suggestion using getRef for current tactic position
+  Lean.Meta.Tactic.TryThis.addSuggestion (← getRef) tacticStx (header := "Try this:")
+  -- Execute the tactic
+  Elab.Tactic.evalTactic tacticStx
+
+/-- The `maximize` tactic finds an upper bound for a linear expression. -/
+elab "maximize" e_stx:term "with" h_stx:ident : tactic => do
+  let (_e_exp, _ty, rH, rr, n, scalingFactor) ← setupLinearOptimTactic e_stx
   -- Wrap the bound computation in try-catch
   let bound ← try
     bestUpperBound rH rr n scalingFactor
@@ -271,23 +292,11 @@ elab "maximize" e_stx:term "with" h_stx:ident : tactic => do
       The constraints may be inconsistent or the expression may be unbounded."
   -- Create the tactic syntax with explicit formatting
   let tacticStx ← `(tactic| have $h_stx : $e_stx ≤ $bound := by linarith)
-  -- Add suggestion using getRef for current tactic position
-  Lean.Meta.Tactic.TryThis.addSuggestion (← getRef) tacticStx (header := "Try this:")
-  -- Execute the tactic
-  Elab.Tactic.evalTactic tacticStx
+  finalizeTacticWithSuggestion tacticStx
 
 /-- The `minimize` tactic finds a lower bound for a linear expression. -/
 elab "minimize" e_stx:term "with" h_stx:ident : tactic => do
-  let e_exp : Expr ← Elab.Tactic.elabTerm e_stx none
-  let ⟨u, ty, e_exp⟩ ← inferTypeQ' e_exp -- `ty : Q(Type u)`, `e_exp : Q($ty)`
-  let _i ← synthInstanceQ q(PartialOrder $ty)
-  let _i ← synthInstanceQ q(Semiring $ty)
-  assumeInstancesCommute
-  have H : Q($e_exp < 0) := q(sorry)
-  -- Turn both the hypotheses and goal into a matrix r and a number n for atoms
-  let (r, n, scalingFactor) ← parseLinarithStructure ty H (← getMainGoal)
-  -- Split off the goal vector rH from the matrix r and leave the hypothesis matrix rr
-  let rH :: rr := r.reverse | failure
+  let (_e_exp, _ty, rH, rr, n, scalingFactor) ← setupLinearOptimTactic e_stx
   -- Wrap the bound computation in try-catch
   let bound ← try
     bestLowerBound rH rr n scalingFactor
@@ -296,10 +305,7 @@ elab "minimize" e_stx:term "with" h_stx:ident : tactic => do
     The constraints may be inconsistent or the expression may be unbounded."
   -- Create the tactic syntax with explicit formatting
   let tacticStx ← `(tactic| have $h_stx : $bound ≤ $e_stx := by linarith)
-  -- Add suggestion using getRef for current tactic position
-  Lean.Meta.Tactic.TryThis.addSuggestion (← getRef) tacticStx (header := "Try this:")
-  -- Execute the tactic
-  Elab.Tactic.evalTactic tacticStx
+  finalizeTacticWithSuggestion tacticStx
 
 end TacticImplementation
 
