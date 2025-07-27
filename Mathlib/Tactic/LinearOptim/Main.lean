@@ -163,7 +163,7 @@ def runSimplexAlgorithm : SimplexAlgorithmM matType (Rat) := do
 `strictCoords` are positive, in the case such `v` exists. If not, throws the error. The latter
 prevents `linarith` from doing useless post-processing. -/
 def findPositiveVector {n m : Nat} {matType : Nat → Nat → Type}
-    [UsableInSimplexAlgorithm matType] (A : matType n m) (_strictIndexes : List Nat) :
+    [UsableInSimplexAlgorithm matType] (A : matType n m) :
     Lean.Meta.MetaM <| Rat := do
   -- State the linear programming problem.
   -- Using Gaussian elimination split variable into free and basic forming the tableau
@@ -183,7 +183,7 @@ section MatrixPreprocessing
 
 def preprocessMaximize (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorithm matType]
       (rH : Linarith.Comp) (rr : List Linarith.Comp) (maxVar : ℕ) :
-      matType (maxVar + 1) (rr.length + 1) × List Nat :=
+      matType (maxVar + 1) (rr.length + 1) :=
     let hyps := rr ++ [rH]
     let values : List (ℕ × ℕ × ℚ) :=
       hyps.foldlIdx (init := []) fun idx cur comp =>
@@ -196,13 +196,12 @@ def preprocessMaximize (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorith
       else
         cur ++ comp.coeffs.map fun (var, c) =>
           (var, idx + 1, c)
-    let strictIndexes := hyps.findIdxs (·.str == Ineq.lt)
-    (ofValues values, strictIndexes)
+    ofValues values
 
 /-- Preprocessing for minimization: goal coefficients are kept as-is. -/
 def preprocessMinimize (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorithm matType]
     (rH : Linarith.Comp) (rr : List Linarith.Comp) (maxVar : ℕ) :
-    matType (maxVar + 1) (rr.length + 1) × List Nat :=
+    matType (maxVar + 1) (rr.length + 1) :=
   let hyps := rr ++ [rH]
   let values : List (ℕ × ℕ × ℚ) :=
     hyps.foldlIdx (init := []) fun idx cur comp =>
@@ -215,8 +214,7 @@ def preprocessMinimize (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorith
     else
       cur ++ comp.coeffs.map fun (var, c) =>
         (var, idx + 1, c)
-  let strictIndexes := hyps.findIdxs (·.str == Ineq.lt)
-  (ofValues values, strictIndexes)
+  ofValues values
 
 end MatrixPreprocessing
 
@@ -225,16 +223,16 @@ section BoundComputation
 /-- Compute the best upper bound for maximization. -/
 def bestUpperBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ) (scalingFactor : ℕ) :
     MetaM (TSyntax `term) := do
-  let (A, strictIndexes) := preprocessMaximize DenseMatrix rH rr n
-  let r ← findPositiveVector A strictIndexes
+  let A := preprocessMaximize DenseMatrix rH rr n
+  let r ← findPositiveVector A
   let scaledR := if scalingFactor == 1 then r else r / scalingFactor
   return quote (-scaledR)
 
 /-- Compute the best lower bound for minimization. -/
 def bestLowerBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ) (scalingFactor : ℕ) :
     MetaM (TSyntax `term) := do
-  let (A, strictIndexes) := preprocessMinimize DenseMatrix rH rr n
-  let r ← findPositiveVector A strictIndexes
+  let A := preprocessMinimize DenseMatrix rH rr n
+  let r ← findPositiveVector A
   let scaledR := if scalingFactor == 1 then r else r / scalingFactor
   return quote scaledR
 
