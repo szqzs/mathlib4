@@ -9,6 +9,7 @@ import Mathlib.Data.Ineq
 import Mathlib.Tactic.Linarith
 import Mathlib.Tactic.Linarith.Preprocessing
 import Mathlib.Tactic.Linarith.Verification
+import Mathlib.Tactic.Linarith.Oracle.SimplexAlgorithm.PositiveVector
 import Mathlib.Tactic.Polyrith
 import Mathlib.Tactic.Ring.Basic
 import Mathlib.Util.Qq
@@ -57,32 +58,6 @@ moves terms to the left hand side, and cancels denominators. -/
 def defaultPreprocessors : List Preprocessor :=
   [filterComparisons, removeNegations, strengthenStrictInt, compWithZero, cancelDenoms]
 
-/-- `preprocess pps l` takes a list `l` of proofs of propositions.
-It maps each preprocessor `pp ∈ pps` over this list.
-The preprocessors are run sequentially: each receives the output of the previous one.
-Note that a preprocessor may produce multiple or no expressions from each input expression,
-so the size of the list may change. -/
-def preprocess (pps : List Preprocessor) (l : List Expr) : MetaM (List Expr) := do
-  let result ← pps.foldlM (init := l) fun ls pp => pp.globalize.transform ls
-  return result
-
-/-- Extract expressions from a list that have the specified type. -/
-def extractByType (ty : Expr) : List Expr → MetaM (List Expr)
-  | [] => return []
-  | h :: l => do
-    let l' ← extractByType ty l
-    if ty == (← typeOfIneqProof h) then
-      return h :: l'
-    else
-      return l'
-
-/-- `getCoeffs` extracts linear combinations from a list of inequality proofs.
-This is a wrapper around linarith's `getLinearCombinations` that maintains API compatibility. -/
-def getCoeffs (transparency : TransparencyMode) : MVarId → List Expr → MetaM (List Comp × ℕ)
-  | g, l => do
-      let (comps, maxVar, _) ← Mathlib.Tactic.Linarith.getLinearCombinations transparency g l
-      return (comps, maxVar)
-
 /-- Extract the scaling factor that CancelDenoms applies to the goal expression.
 Returns 1 if no scaling is applied. -/
 def extractGoalScalingFactor (H : Expr) : MetaM ℕ := do
@@ -106,40 +81,20 @@ partial def parseLinarithStructure (ty H : Expr) (g : MVarId)
     (cfg : TransparencyMode := .reducible) : MetaM (List Comp × ℕ × ℕ) := g.withContext do
   let hyps := H :: (← getLocalHyps).toList
   let goalScalingFactor ← extractGoalScalingFactor H
-  let es ← preprocess defaultPreprocessors hyps
-  let hypSet ← extractByType ty es
-  let (comps, maxVar) ← getCoeffs cfg g hypSet
+  let es ← Linarith.preprocessSimple defaultPreprocessors hyps
+  let hypSet ← es.filterM (fun h => return ty == (← typeOfIneqProof h))
+  let (comps, maxVar, _) ← Mathlib.Tactic.Linarith.getLinearCombinations cfg hypSet
   return (comps, maxVar, goalScalingFactor)
 
 end Preprocessing
 
 section SimplexAlgorithm
 
--- Re-export simplex algorithm types and functions
-open Mathlib.Tactic.Linarith.SimplexAlgorithm (SimplexAlgorithmException SimplexAlgorithmM)
-open Mathlib.Tactic.Linarith.SimplexAlgorithm (doPivotOperation chooseEnteringVar chooseExitingVar
-  choosePivots runLinearOptimSimplex)
+open Linarith.SimplexAlgorithm
 
 variable {matType : Nat → Nat → Type} [UsableInSimplexAlgorithm matType]
 
 
-/-- Finds a nonnegative vector `v`, such that `A v = 0` and some of its coordinates from
-`strictCoords` are positive, in the case such `v` exists. If not, throws the error. The latter
-prevents `linarith` from doing useless post-processing. -/
-def findPositiveVector {n m : Nat} {matType : Nat → Nat → Type}
-    [UsableInSimplexAlgorithm matType] (A : matType n m) :
-    Lean.Meta.MetaM <| Rat := do
-  -- State the linear programming problem.
-  -- Using Gaussian elimination split variable into free and basic forming the tableau
-  -- that will be operated by the Simplex Algorithm.
-  let initTableau ← Gauss.getTableau A
-  -- Run the Simplex Algorithm and extract the solution.
-  let res ← runLinearOptimSimplex.run initTableau
-  match res.fst with
-  | .ok r =>
-    return r
-  | .error _e =>
-    throwError "Simplex Algorithm failed"
 
 end SimplexAlgorithm
 
@@ -167,33 +122,9 @@ end MatrixPreprocessing
 
 section BoundComputation
 
-/-- Compute the best upper bound for maximization. -/
-def computeOptimalBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ)
-(scalingFactor : ℕ) (isMaximize : Bool) : MetaM (TSyntax `term) := do
-  let A := preprocessLinearOptim DenseMatrix rH rr n
-  let r ← findPositiveVector A
-  let scaledR := if scalingFactor == 1 then r else r / scalingFactor
-  return quote (if isMaximize then -scaledR else scaledR)
-
-end BoundComputation
-
-section TacticImplementation
-
-/--
-Common setup for linear optimization tactics.
-
-Handles type inference, instance synthesis, and parsing of the linear structure.
-Returns `(e_exp, ty, rH, rr, n, scalingFactor)` where:
-- `e_exp` is the elaborated expression
-- `ty` is the type of the expression
-- `rH` is the goal vector (linear combination)
-- `rr` is the list of hypothesis vectors
-- `n` is the maximum variable index
-- `scalingFactor` is the scaling factor from `CancelDenoms`
--/
-def setupLinearOptimTactic (e_stx : Term) (isMaximize : Bool) :
-    TacticM (Expr × Expr × Linarith.Comp × List Linarith.Comp × ℕ × ℕ) := do
-  let e_exp : Expr ← Elab.Tactic.elabTerm e_stx none
+/-- Compute the optimal bound (upper bound for maximization, lower bound for minimization).
+Returns the optimal bound as a rational number. -/
+def computeOptimalBound (e_exp : Expr) (isMaximize : Bool) (g : MVarId) : MetaM ℚ := do
   let ⟨u, ty, e_exp⟩ ← inferTypeQ' e_exp -- `ty : Q(Type u)`, `e_exp : Q($ty)`
   let _i ← synthInstanceQ q(PartialOrder $ty)
   let _i ← synthInstanceQ q(Semiring $ty)
@@ -203,49 +134,52 @@ def setupLinearOptimTactic (e_stx : Term) (isMaximize : Bool) :
   else
     q(show $e_exp > 0 from sorry)
   -- Turn both the hypotheses and goal into a matrix r and a number n for atoms
-  let (r, n, scalingFactor) ← parseLinarithStructure ty H (← getMainGoal)
+  let (r, n, scalingFactor) ← parseLinarithStructure ty H g
   -- Split off the goal vector rH from the matrix r and leave the hypothesis matrix rr
   let rH :: rr := r.reverse | failure
-  return (e_exp, ty, rH, rr, n, scalingFactor)
 
-/--
-Common finalization for linear optimization tactics.
+  let A := preprocessLinearOptim DenseMatrix rH rr n
+  let r ← Linarith.SimplexAlgorithm.simplexOptimalBound A
+  let scaledR := if scalingFactor == 1 then r else r / scalingFactor
+  return (if isMaximize then -scaledR else scaledR)
 
-Takes a generated tactic syntax and:
-1. Adds it as a "Try this:" suggestion to the info view
-2. Executes the tactic to complete the goal
--/
-def finalizeTacticWithSuggestion (tacticStx : TSyntax `tactic) : TacticM Unit := do
+end BoundComputation
+
+section TacticImplementation
+
+
+
+/-- The `maximize` tactic finds an upper bound for a linear expression. -/
+elab "maximize" e_stx:term "with" h_stx:ident : tactic => do
+  let e_exp : Expr ← Elab.Tactic.elabTerm e_stx none
+  -- Wrap the bound computation in try-catch
+  let bound ← try
+    computeOptimalBound e_exp true (← getMainGoal)
+  catch _e =>
+    throwError "maximize: an upper bound cannot be produced for {e_stx}.\n    \
+      The constraints may be inconsistent or the expression may be unbounded."
+  -- Create the tactic syntax with explicit formatting
+  let tacticStx ← `(tactic| have $h_stx : $e_stx ≤ $(quote bound) := by linarith)
   -- Add suggestion using getRef for current tactic position
   Lean.Meta.Tactic.TryThis.addSuggestion (← getRef) tacticStx
   -- Execute the tactic
   Elab.Tactic.evalTactic tacticStx
 
-/-- The `maximize` tactic finds an upper bound for a linear expression. -/
-elab "maximize" e_stx:term "with" h_stx:ident : tactic => do
-  let (_e_exp, _ty, rH, rr, n, scalingFactor) ← setupLinearOptimTactic e_stx true
-  -- Wrap the bound computation in try-catch
-  let bound ← try
-    computeOptimalBound rH rr n scalingFactor true
-  catch _e =>
-    throwError "maximize: an upper bound cannot be produced for {e_stx}.\n    \
-      The constraints may be inconsistent or the expression may be unbounded."
-  -- Create the tactic syntax with explicit formatting
-  let tacticStx ← `(tactic| have $h_stx : $e_stx ≤ $bound := by linarith)
-  finalizeTacticWithSuggestion tacticStx
-
 /-- The `minimize` tactic finds a lower bound for a linear expression. -/
 elab "minimize" e_stx:term "with" h_stx:ident : tactic => do
-  let (_e_exp, _ty, rH, rr, n, scalingFactor) ← setupLinearOptimTactic e_stx false
+  let e_exp : Expr ← Elab.Tactic.elabTerm e_stx none
   -- Wrap the bound computation in try-catch
   let bound ← try
-    computeOptimalBound rH rr n scalingFactor false
+    computeOptimalBound e_exp false (← getMainGoal)
   catch _e =>
     throwError "minimize: a lower bound cannot be produced for {e_stx}.
     The constraints may be inconsistent or the expression may be unbounded."
   -- Create the tactic syntax with explicit formatting
-  let tacticStx ← `(tactic| have $h_stx : $bound ≤ $e_stx := by linarith)
-  finalizeTacticWithSuggestion tacticStx
+  let tacticStx ← `(tactic| have $h_stx : $(quote bound) ≤ $e_stx := by linarith)
+  -- Add suggestion using getRef for current tactic position
+  Lean.Meta.Tactic.TryThis.addSuggestion (← getRef) tacticStx
+  -- Execute the tactic
+  Elab.Tactic.evalTactic tacticStx
 
 end TacticImplementation
 

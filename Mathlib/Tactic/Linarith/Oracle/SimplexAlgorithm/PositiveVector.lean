@@ -99,4 +99,24 @@ def findPositiveVector {n m : Nat} {matType : Nat → Nat → Type} [UsableInSim
   else
     throwError "Simplex Algorithm failed"
 
+/-- Returns the negative of the optimal value of the linear programming problem defined by matrix A.
+For a maximization problem, this gives the negative of the maximum value.
+For a minimization problem, this gives the negative of the minimum value.
+The matrix A represents the constraints in standard form.
+This is a variant of `findPositiveVector` specialized for linear optimization. -/
+def simplexOptimalBound {n m : Nat} {matType : Nat → Nat → Type}
+    [UsableInSimplexAlgorithm matType] (A : matType n m) :
+    Lean.Meta.MetaM <| Rat := do
+  -- State the linear programming problem.
+  -- Using Gaussian elimination split variable into free and basic forming the tableau
+  -- that will be operated by the Simplex Algorithm.
+  let initTableau ← Gauss.getTableau A
+  -- Run the Simplex Algorithm and extract the solution.
+  let res ← runLinearOptimSimplex.run initTableau
+  match res.fst with
+  | .ok r =>
+    return r
+  | .error _e =>
+    throwError "Simplex Algorithm failed"
+
 end Mathlib.Tactic.Linarith.SimplexAlgorithm

@@ -176,19 +176,20 @@ Returns `(comps, maxVar, inputs)` where:
 - `maxVar` is the maximum variable index used
 - `inputs` is the list of processed proof expressions
 -/
-def getLinearCombinations (transparency : TransparencyMode) :
-    MVarId → List Expr → MetaM (List Comp × ℕ × List Expr)
-  | _, [] => throwError "no args to linarith"
-  | _, l@(h::_) => do
-      Lean.Core.checkSystem decl_name%.toString
-      -- For the elimination to work properly, we must add a proof of `-1 < 0` to the list,
-      -- along with negated equality proofs.
-      let l' ← addNegEqProofs l
-      let inputs := (← mkNegOneLtZeroProof (← typeOfIneqProof h))::l'.reverse
-      trace[linarith.detail] "inputs:{indentD <| toMessageData (← inputs.mapM inferType)}"
-      let (comps, maxVar) ← linearFormsAndMaxVar transparency inputs
-      trace[linarith.detail] "comps:{indentD <| toMessageData comps}"
-      return (comps, maxVar, inputs)
+def getLinearCombinations (transparency : TransparencyMode) (l : List Expr) :
+    MetaM (List Comp × ℕ × List Expr) := do
+  if l.isEmpty then
+    throwError "no args to linarith"
+  let h := l.head!
+  Lean.Core.checkSystem decl_name%.toString
+  -- For the elimination to work properly, we must add a proof of `-1 < 0` to the list,
+  -- along with negated equality proofs.
+  let l' ← addNegEqProofs l
+  let inputs := (← mkNegOneLtZeroProof (← typeOfIneqProof h))::l'.reverse
+  trace[linarith.detail] "inputs:{indentD <| toMessageData (← inputs.mapM inferType)}"
+  let (comps, maxVar) ← linearFormsAndMaxVar transparency inputs
+  trace[linarith.detail] "comps:{indentD <| toMessageData comps}"
+  return (comps, maxVar, inputs)
 
 /-! #### The main method -/
 
@@ -220,7 +221,7 @@ def proveFalseByLinarith (transparency : TransparencyMode) (oracle : Certificate
   | _, [] => throwError "no args to linarith"
   | g, l => do
       let (comps, max_var, inputs) ← detailTrace "getLinearCombinations" <|
-        getLinearCombinations transparency g l
+        getLinearCombinations transparency l
       -- perform the elimination and fail if no contradiction is found.
       let certificate : Std.HashMap Nat Nat ←
         withTraceNode `linarith (return m!"{exceptEmoji ·} Invoking oracle") do
