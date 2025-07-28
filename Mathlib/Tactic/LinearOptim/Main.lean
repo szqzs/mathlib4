@@ -91,7 +91,7 @@ def extractGoalScalingFactor (H : Expr) : MetaM ℕ := do
     let (_, lhs) ← parseCompAndExpr goalType
     let containsDiv := lhs.containsConst fun n =>
       n = ``HDiv.hDiv || n = ``Div.div || n = ``Inv.inv || n == ``OfScientific.ofScientific
-    
+
     if containsDiv then
       let (scalingFactor, _) ← CancelDenoms.derive lhs
       return scalingFactor
@@ -181,7 +181,7 @@ end SimplexAlgorithm
 
 section MatrixPreprocessing
 
-def preprocessMaximize (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorithm matType]
+def preprocessLinearOptim (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorithm matType]
       (rH : Linarith.Comp) (rr : List Linarith.Comp) (maxVar : ℕ) :
       matType (maxVar + 1) (rr.length + 1) :=
     let hyps := rr ++ [rH]
@@ -198,23 +198,6 @@ def preprocessMaximize (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorith
           (var, idx + 1, c)
     ofValues values
 
-/-- Preprocessing for minimization: goal coefficients are kept as-is. -/
-def preprocessMinimize (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorithm matType]
-    (rH : Linarith.Comp) (rr : List Linarith.Comp) (maxVar : ℕ) :
-    matType (maxVar + 1) (rr.length + 1) :=
-  let hyps := rr ++ [rH]
-  let values : List (ℕ × ℕ × ℚ) :=
-    hyps.foldlIdx (init := []) fun idx cur comp =>
-    if idx == rr.length then
-      cur ++ comp.coeffs.map fun (var, c) =>
-        (var, idx, c)
-    else if idx == rr.length - 1 then
-      cur ++ comp.coeffs.map fun (var, c) =>
-        (var, 0, c)
-    else
-      cur ++ comp.coeffs.map fun (var, c) =>
-        (var, idx + 1, c)
-  ofValues values
 
 end MatrixPreprocessing
 
@@ -223,7 +206,7 @@ section BoundComputation
 /-- Compute the best upper bound for maximization. -/
 def bestUpperBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ) (scalingFactor : ℕ) :
     MetaM (TSyntax `term) := do
-  let A := preprocessMaximize DenseMatrix rH rr n
+  let A := preprocessLinearOptim DenseMatrix rH rr n
   let r ← findPositiveVector A
   let scaledR := if scalingFactor == 1 then r else r / scalingFactor
   return quote (-scaledR)
@@ -231,7 +214,7 @@ def bestUpperBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ) (sca
 /-- Compute the best lower bound for minimization. -/
 def bestLowerBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ) (scalingFactor : ℕ) :
     MetaM (TSyntax `term) := do
-  let A := preprocessMinimize DenseMatrix rH rr n
+  let A := preprocessLinearOptim DenseMatrix rH rr n
   let r ← findPositiveVector A
   let scaledR := if scalingFactor == 1 then r else r / scalingFactor
   return quote scaledR
@@ -246,20 +229,23 @@ Common setup for linear optimization tactics.
 Handles type inference, instance synthesis, and parsing of the linear structure.
 Returns `(e_exp, ty, rH, rr, n, scalingFactor)` where:
 - `e_exp` is the elaborated expression
-- `ty` is the type of the expression  
+- `ty` is the type of the expression
 - `rH` is the goal vector (linear combination)
 - `rr` is the list of hypothesis vectors
 - `n` is the maximum variable index
 - `scalingFactor` is the scaling factor from `CancelDenoms`
 -/
-def setupLinearOptimTactic (e_stx : Term) :
+def setupLinearOptimTactic (e_stx : Term) (isMaximize : Bool) :
     TacticM (Expr × Expr × Linarith.Comp × List Linarith.Comp × ℕ × ℕ) := do
   let e_exp : Expr ← Elab.Tactic.elabTerm e_stx none
   let ⟨u, ty, e_exp⟩ ← inferTypeQ' e_exp -- `ty : Q(Type u)`, `e_exp : Q($ty)`
   let _i ← synthInstanceQ q(PartialOrder $ty)
   let _i ← synthInstanceQ q(Semiring $ty)
   assumeInstancesCommute
-  have H : Q($e_exp < 0) := q(sorry)
+  let H := if isMaximize then
+    q(show $e_exp < 0 from sorry)
+  else
+    q(show $e_exp > 0 from sorry)
   -- Turn both the hypotheses and goal into a matrix r and a number n for atoms
   let (r, n, scalingFactor) ← parseLinarithStructure ty H (← getMainGoal)
   -- Split off the goal vector rH from the matrix r and leave the hypothesis matrix rr
@@ -281,7 +267,7 @@ def finalizeTacticWithSuggestion (tacticStx : TSyntax `tactic) : TacticM Unit :=
 
 /-- The `maximize` tactic finds an upper bound for a linear expression. -/
 elab "maximize" e_stx:term "with" h_stx:ident : tactic => do
-  let (_e_exp, _ty, rH, rr, n, scalingFactor) ← setupLinearOptimTactic e_stx
+  let (_e_exp, _ty, rH, rr, n, scalingFactor) ← setupLinearOptimTactic e_stx true
   -- Wrap the bound computation in try-catch
   let bound ← try
     bestUpperBound rH rr n scalingFactor
@@ -294,7 +280,7 @@ elab "maximize" e_stx:term "with" h_stx:ident : tactic => do
 
 /-- The `minimize` tactic finds a lower bound for a linear expression. -/
 elab "minimize" e_stx:term "with" h_stx:ident : tactic => do
-  let (_e_exp, _ty, rH, rr, n, scalingFactor) ← setupLinearOptimTactic e_stx
+  let (_e_exp, _ty, rH, rr, n, scalingFactor) ← setupLinearOptimTactic e_stx false
   -- Wrap the bound computation in try-catch
   let bound ← try
     bestLowerBound rH rr n scalingFactor
