@@ -88,15 +88,6 @@ partial def parseLinarithStructure (ty H : Expr) (g : MVarId)
 
 end Preprocessing
 
-section SimplexAlgorithm
-
-open Linarith.SimplexAlgorithm
-
-variable {matType : Nat → Nat → Type} [UsableInSimplexAlgorithm matType]
-
-
-
-end SimplexAlgorithm
 
 section MatrixPreprocessing
 
