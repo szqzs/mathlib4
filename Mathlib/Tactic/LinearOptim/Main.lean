@@ -52,11 +52,6 @@ namespace Mathlib.Tactic.LinearOptim
 
 section Preprocessing
 
-/-- The default preprocessors for the linear optimization tactics.
-Throws away non-linear-inequality hypotheses, pushes negations, turns inequalities into ≤,
-moves terms to the left hand side, and cancels denominators. -/
-def defaultPreprocessors : List Preprocessor :=
-  [filterComparisons, removeNegations, strengthenStrictInt, compWithZero, cancelDenoms]
 
 /-- Extract the scaling factor that CancelDenoms applies to the goal expression.
 Returns 1 if no scaling is applied. -/
@@ -81,7 +76,7 @@ partial def parseLinarithStructure (ty H : Expr) (g : MVarId)
     (cfg : TransparencyMode := .reducible) : MetaM (List Comp × ℕ × ℕ) := g.withContext do
   let hyps := H :: (← getLocalHyps).toList
   let goalScalingFactor ← extractGoalScalingFactor H
-  let es ← Linarith.preprocessSimple defaultPreprocessors hyps
+  let es ← Linarith.preprocessSimple Linarith.defaultLinearOptimPreprocessors hyps
   let hypSet ← es.filterM (fun h => return ty == (← typeOfIneqProof h))
   let (comps, maxVar, _) ← Mathlib.Tactic.Linarith.getLinearCombinations cfg hypSet
   return (comps, maxVar, goalScalingFactor)

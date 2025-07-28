@@ -383,6 +383,12 @@ def defaultPreprocessors : List GlobalBranchingPreprocessor :=
   [filterComparisons, removeNegations, natToInt, strengthenStrictInt,
     compWithZero, cancelDenoms]
 
+/-- The default preprocessors for the linear optimization tactics.
+Throws away non-linear-inequality hypotheses, pushes negations, turns inequalities into ≤,
+moves terms to the left hand side, and cancels denominators. -/
+def defaultLinearOptimPreprocessors : List Preprocessor :=
+  [filterComparisons, removeNegations, strengthenStrictInt, compWithZero, cancelDenoms]
+
 /--
 `preprocess pps l` takes a list `l` of proofs of propositions.
 It maps each preprocessor `pp ∈ pps` over this list.

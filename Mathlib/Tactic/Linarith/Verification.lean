@@ -217,13 +217,13 @@ tactic, which is typically `ring`. We prove (2) by folding over the set of hypot
 `transparency : TransparencyMode` controls the transparency level with which atoms are identified.
 -/
 def proveFalseByLinarith (transparency : TransparencyMode) (oracle : CertificateOracle)
-    (discharger : TacticM Unit) : MVarId → List Expr → MetaM Expr
-  | _, [] => throwError "no args to linarith"
-  | g, l => do
-      let (comps, max_var, inputs) ← detailTrace "getLinearCombinations" <|
-        getLinearCombinations transparency l
-      -- perform the elimination and fail if no contradiction is found.
-      let certificate : Std.HashMap Nat Nat ←
+    (discharger : TacticM Unit) (g : MVarId) (l : List Expr) : MetaM Expr := do
+  if l.isEmpty then
+    throwError "no args to linarith"
+  let (comps, max_var, inputs) ← detailTrace "getLinearCombinations" <|
+    getLinearCombinations transparency l
+  -- perform the elimination and fail if no contradiction is found.
+  let certificate : Std.HashMap Nat Nat ←
         withTraceNode `linarith (return m!"{exceptEmoji ·} Invoking oracle") do
           let certificate ←
             try
