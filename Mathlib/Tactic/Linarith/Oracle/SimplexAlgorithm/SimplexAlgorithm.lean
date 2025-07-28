@@ -135,7 +135,9 @@ def chooseExitingVar (enterIdx : Nat) : SimplexAlgorithmM matType Nat := do
       exitIdxOpt := i
       minCoef := coef
       minIdx := (← get).basic[i]!
-  return exitIdxOpt.get! -- such variable always exists because our problem is bounded
+  match exitIdxOpt with
+  | .none => throwThe SimplexAlgorithmException SimplexAlgorithmException.infeasible
+  | .some exitIdx => return exitIdx
 
 /--
 Chooses entering and exiting variables using
@@ -180,6 +182,10 @@ def runLinearOptimSimplex : SimplexAlgorithmM matType (Rat) := do
     Lean.Core.checkSystem decl_name%.toString
     let ⟨exitIdx, enterIdx⟩ ← choosePivots
     doPivotOperation exitIdx enterIdx
+    -- Safety check to prevent infinite loops
+    if iteration > 1000 then
+      throwError "LinearOptim: Too many simplex iterations ({iteration}), \
+        possibly inconsistent constraints or numerical issues"
   let tableau ← get
   let lastIdx := tableau.free.size - 1
   return tableau.mat[(0, lastIdx)]!
