@@ -275,7 +275,7 @@ Takes a generated tactic syntax and:
 -/
 def finalizeTacticWithSuggestion (tacticStx : TSyntax `tactic) : TacticM Unit := do
   -- Add suggestion using getRef for current tactic position
-  Lean.Meta.Tactic.TryThis.addSuggestion (← getRef) tacticStx (header := "Try this:")
+  Lean.Meta.Tactic.TryThis.addSuggestion (← getRef) tacticStx
   -- Execute the tactic
   Elab.Tactic.evalTactic tacticStx
 
