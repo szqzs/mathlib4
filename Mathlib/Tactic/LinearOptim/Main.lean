@@ -204,20 +204,12 @@ end MatrixPreprocessing
 section BoundComputation
 
 /-- Compute the best upper bound for maximization. -/
-def bestUpperBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ) (scalingFactor : ℕ) :
-    MetaM (TSyntax `term) := do
+def computeOptimalBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ)
+(scalingFactor : ℕ) (isMaximize : Bool) : MetaM (TSyntax `term) := do
   let A := preprocessLinearOptim DenseMatrix rH rr n
   let r ← findPositiveVector A
   let scaledR := if scalingFactor == 1 then r else r / scalingFactor
-  return quote (-scaledR)
-
-/-- Compute the best lower bound for minimization. -/
-def bestLowerBound (rH : Linarith.Comp) (rr : List Linarith.Comp) (n : ℕ) (scalingFactor : ℕ) :
-    MetaM (TSyntax `term) := do
-  let A := preprocessLinearOptim DenseMatrix rH rr n
-  let r ← findPositiveVector A
-  let scaledR := if scalingFactor == 1 then r else r / scalingFactor
-  return quote scaledR
+  return quote (if isMaximize then -scaledR else scaledR)
 
 end BoundComputation
 
@@ -270,7 +262,7 @@ elab "maximize" e_stx:term "with" h_stx:ident : tactic => do
   let (_e_exp, _ty, rH, rr, n, scalingFactor) ← setupLinearOptimTactic e_stx true
   -- Wrap the bound computation in try-catch
   let bound ← try
-    bestUpperBound rH rr n scalingFactor
+    computeOptimalBound rH rr n scalingFactor true
   catch _e =>
     throwError "maximize: an upper bound cannot be produced for {e_stx}.\n    \
       The constraints may be inconsistent or the expression may be unbounded."
@@ -283,7 +275,7 @@ elab "minimize" e_stx:term "with" h_stx:ident : tactic => do
   let (_e_exp, _ty, rH, rr, n, scalingFactor) ← setupLinearOptimTactic e_stx false
   -- Wrap the bound computation in try-catch
   let bound ← try
-    bestLowerBound rH rr n scalingFactor
+    computeOptimalBound rH rr n scalingFactor false
   catch _e =>
     throwError "minimize: a lower bound cannot be produced for {e_stx}.
     The constraints may be inconsistent or the expression may be unbounded."
