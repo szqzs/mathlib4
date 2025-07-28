@@ -19,6 +19,18 @@ abbrev GaussM (n m : Nat) (matType : Nat → Nat → Type) := StateT (matType n 
 
 variable {n m : Nat} {matType : Nat → Nat → Type} [UsableInSimplexAlgorithm matType]
 
+/-- Finds a suitable pivot row for Gaussian elimination with feasibility preference.
+This function implements a two-phase pivot selection strategy:
+
+1. **Feasibility-first selection**: Among all rows with nonzero elements in column `col` 
+   (starting from `rowStart`), prefer rows where the resulting basic variable would be 
+   non-negative (i.e., `rhs/pivot ≥ 0`).
+
+2. **Degeneracy handling**: If no feasible pivot exists, decide whether to skip this column
+   (if we have more remaining columns than rows) or use the first available nonzero pivot.
+
+This approach helps maintain feasibility during Gaussian elimination and handles cases where
+standard pivoting might lead to negative basic variables. -/
 def findNonzeroRow (rowStart col : Nat) : GaussM n m matType <| Option Nat := do
   let mat ← get
   let lastCol := m - 1

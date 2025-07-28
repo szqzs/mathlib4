@@ -118,46 +118,10 @@ section SimplexAlgorithm
 -- Re-export simplex algorithm types and functions
 open Mathlib.Tactic.Linarith.SimplexAlgorithm (SimplexAlgorithmException SimplexAlgorithmM)
 open Mathlib.Tactic.Linarith.SimplexAlgorithm (doPivotOperation chooseEnteringVar chooseExitingVar
-  choosePivots)
+  choosePivots runLinearOptimSimplex)
 
 variable {matType : Nat → Nat → Type} [UsableInSimplexAlgorithm matType]
 
-def checkSuccess : SimplexAlgorithmM matType Bool := do
-  let tableau ← get
-  let lastIdx := tableau.free.size - 1
-  let feasible ← tableau.basic.size.allM (fun i _ => do
-    if i ≠ 0 then
-      let val := tableau.mat[(i, lastIdx)]!
-      return val ≥ 0
-    else
-      return true
-    )
-  if not feasible then
-    return false
-  let optimal ← tableau.free.size.allM (fun j _ => do
-    if j == lastIdx then
-      return true
-    else
-      let val := tableau.mat[(0, j)]!
-      return val ≤ 0)
-  return optimal
-
-
-
-
-
-/-- Runs the Simplex Algorithm inside the `SimplexAlgorithmM`. It always terminates, finding
-solution if such exists. -/
-def runSimplexAlgorithm : SimplexAlgorithmM matType (Rat) := do
-  let mut iteration : Nat := 0
-  while !(← checkSuccess) do
-    iteration := iteration + 1
-    Lean.Core.checkSystem decl_name%.toString
-    let ⟨exitIdx, enterIdx⟩ ← choosePivots
-    doPivotOperation exitIdx enterIdx
-  let tableau ← get
-  let lastIdx := tableau.free.size - 1
-  return tableau.mat[(0, lastIdx)]!
 
 /-- Finds a nonnegative vector `v`, such that `A v = 0` and some of its coordinates from
 `strictCoords` are positive, in the case such `v` exists. If not, throws the error. The latter
@@ -170,7 +134,7 @@ def findPositiveVector {n m : Nat} {matType : Nat → Nat → Type}
   -- that will be operated by the Simplex Algorithm.
   let initTableau ← Gauss.getTableau A
   -- Run the Simplex Algorithm and extract the solution.
-  let res ← runSimplexAlgorithm.run initTableau
+  let res ← runLinearOptimSimplex.run initTableau
   match res.fst with
   | .ok r =>
     return r

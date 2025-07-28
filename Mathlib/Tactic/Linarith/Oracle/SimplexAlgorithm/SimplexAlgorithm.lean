@@ -120,4 +120,64 @@ def runSimplexAlgorithm : SimplexAlgorithmM matType Unit := do
     let ⟨exitIdx, enterIdx⟩ ← choosePivots
     doPivotOperation exitIdx enterIdx
 
+/-- Check if the linear optimization solution is found.
+This is a specialized version of `checkSuccess` for linear optimization (maximize/minimize) with 
+different success criteria from the standard linarith simplex algorithm:
+
+1. **Feasibility check**: All basic variables must be non-negative (same as standard)
+2. **Optimality check**: All reduced costs should be ≤ 0 for maximization problems
+
+The key difference from the standard `checkSuccess` is that this checks for optimality 
+(reduced costs ≤ 0) rather than just requiring the objective value to be positive.
+This is appropriate for linear programming optimization where we want to find the optimal
+value, not just prove feasibility. -/
+def checkLinearOptimSuccess : SimplexAlgorithmM matType Bool := do
+  let tableau ← get
+  let lastIdx := tableau.free.size - 1
+  -- First check feasibility: all basic variables must be non-negative
+  let feasible ← tableau.basic.size.allM (fun i _ => do
+    if i ≠ 0 then
+      let val := tableau.mat[(i, lastIdx)]!
+      return val ≥ 0
+    else
+      return true
+    )
+  if not feasible then
+    return false
+  -- Check optimality: all reduced costs should be ≤ 0 for maximization
+  -- (Skip the last column which is RHS)
+  let optimal ← tableau.free.size.allM (fun j _ => do
+    if j == lastIdx then
+      return true  -- Skip RHS column
+    else
+      let val := tableau.mat[(0, j)]!
+      return val ≤ 0)  -- All reduced costs ≤ 0
+  return optimal
+
+/-- Runs the Simplex Algorithm for linear optimization (maximize/minimize).
+This is a specialized variant of the standard `runSimplexAlgorithm` with the following 
+key differences:
+
+1. **Objective extraction**: Instead of just finding feasibility, this extracts the optimal 
+   objective value from the tableau's bottom-right corner `tableau.mat[(0, lastIdx)]!`.
+   
+2. **Optimization focus**: Designed specifically for linear optimization problems where we 
+   want to find the maximum or minimum value of a linear expression.
+   
+3. **Success criteria**: Uses `checkLinearOptimSuccess` which verifies both feasibility 
+   (non-negative basic variables) and optimality (non-positive reduced costs).
+
+This function should be used when you need to solve linear programming problems for 
+optimization, as opposed to the standard `runSimplexAlgorithm` which focuses on feasibility. -/
+def runLinearOptimSimplex : SimplexAlgorithmM matType (Rat) := do
+  let mut iteration : Nat := 0
+  while !(← checkLinearOptimSuccess) do
+    iteration := iteration + 1
+    Lean.Core.checkSystem decl_name%.toString
+    let ⟨exitIdx, enterIdx⟩ ← choosePivots
+    doPivotOperation exitIdx enterIdx
+  let tableau ← get
+  let lastIdx := tableau.free.size - 1
+  return tableau.mat[(0, lastIdx)]!
+
 end Mathlib.Tactic.Linarith.SimplexAlgorithm
