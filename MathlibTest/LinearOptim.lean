@@ -290,3 +290,30 @@ example (x : ℚ) (h1 : x > 0) (h2 : x < 10) : True := by
 example (x : ℚ) (h1 : x < 10) (h2 : x > 0) : True := by
   maximize x / 2 with H
   trivial
+
+
+
+-- Test that should fail: unbounded expression
+/-- error: maximize: an upper bound cannot be produced for x.
+    The constraints may be inconsistent or the expression may be unbounded. -/
+#guard_msgs in
+example (x : ℚ) (h2 : x > 0) :  True := by
+  maximize x with H
+  trivial
+
+
+
+-- Test that should succeed: bounded expression
+/-- info: Try this: have H : x ≤ -5 := by linarith -/
+#guard_msgs in
+example (x : ℚ) (h2 : x < -5) :  True := by
+  maximize x with H
+  trivial
+
+-- Test that should succeed: bounded expression
+/-- error: maximize: an upper bound cannot be produced for x.
+    The constraints may be inconsistent or the expression may be unbounded. -/
+#guard_msgs in
+example (x : ℚ) (h2 : x > 0) (h1 : x < -5):  True := by
+  maximize x with H
+  trivial

@@ -218,8 +218,6 @@ tactic, which is typically `ring`. We prove (2) by folding over the set of hypot
 -/
 def proveFalseByLinarith (transparency : TransparencyMode) (oracle : CertificateOracle)
     (discharger : TacticM Unit) (g : MVarId) (l : List Expr) : MetaM Expr := do
-  if l.isEmpty then
-    throwError "no args to linarith"
   let (comps, max_var, inputs) ← detailTrace "getLinearCombinations" <|
     getLinearCombinations transparency l
   -- perform the elimination and fail if no contradiction is found.

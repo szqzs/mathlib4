@@ -141,7 +141,7 @@ elab "maximize" e_stx:term "with" h_stx:ident : tactic => do
   -- Wrap the bound computation in try-catch
   let bound ← try
     computeOptimalBound e_exp true (← getMainGoal)
-  catch _e =>
+  catch _ =>
     throwError "maximize: an upper bound cannot be produced for {e_stx}.\n    \
       The constraints may be inconsistent or the expression may be unbounded."
   -- Create the tactic syntax with explicit formatting
@@ -157,7 +157,7 @@ elab "minimize" e_stx:term "with" h_stx:ident : tactic => do
   -- Wrap the bound computation in try-catch
   let bound ← try
     computeOptimalBound e_exp false (← getMainGoal)
-  catch _e =>
+  catch _ =>
     throwError "minimize: a lower bound cannot be produced for {e_stx}.
     The constraints may be inconsistent or the expression may be unbounded."
   -- Create the tactic syntax with explicit formatting

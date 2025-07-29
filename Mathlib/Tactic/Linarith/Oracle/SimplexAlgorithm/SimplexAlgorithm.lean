@@ -176,16 +176,16 @@ key differences:
 This function should be used when you need to solve linear programming problems for
 optimization, as opposed to the standard `runSimplexAlgorithm` which focuses on feasibility. -/
 def runLinearOptimSimplex : SimplexAlgorithmM matType (Rat) := do
-  let mut iteration : Nat := 0
+  -- let mut iteration : Nat := 0
   while !(← checkLinearOptimSuccess) do
-    iteration := iteration + 1
+    -- iteration := iteration + 1
     Lean.Core.checkSystem decl_name%.toString
     let ⟨exitIdx, enterIdx⟩ ← choosePivots
     doPivotOperation exitIdx enterIdx
     -- Safety check to prevent infinite loops
-    if iteration > 1000 then
-      throwError "LinearOptim: Too many simplex iterations ({iteration}), \
-        possibly inconsistent constraints or numerical issues"
+    -- if iteration > 1000 then
+    --   throwError "LinearOptim: Too many simplex iterations ({iteration}), \
+    --     possibly inconsistent constraints or numerical issues"
   let tableau ← get
   let lastIdx := tableau.free.size - 1
   return tableau.mat[(0, lastIdx)]!
