@@ -126,7 +126,7 @@ def computeOptimalBound (e_exp : Expr) (isMaximize : Bool) (g : MVarId) : MetaM 
 
   let A := preprocessLinearOptim DenseMatrix rH rr n
   let r ← Linarith.SimplexAlgorithm.simplexOptimalBound A
-  let scaledR := if scalingFactor == 1 then r else r / scalingFactor
+  let scaledR := r / scalingFactor
   return (if isMaximize then -scaledR else scaledR)
 
 end BoundComputation
