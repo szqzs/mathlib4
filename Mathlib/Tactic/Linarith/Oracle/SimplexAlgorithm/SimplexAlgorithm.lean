@@ -143,6 +143,10 @@ def choosePivots : SimplexAlgorithmM matType (Nat × Nat) := do
 /--
 Runs the Simplex Algorithm inside the `SimplexAlgorithmM`. It always terminates, finding solution if
 such exists.
+
+This function should be used when you need to determine if a system has a feasible solution,
+as opposed to `runSimplexAlgorithmOptim` and `runLinearOptimSimplex` which focus on
+optimization problems.
 -/
 def runSimplexAlgorithm : SimplexAlgorithmM matType Unit := do
   while !(← checkSuccess) do
@@ -150,27 +154,23 @@ def runSimplexAlgorithm : SimplexAlgorithmM matType Unit := do
     let ⟨exitIdx, enterIdx⟩ ← choosePivots
     doPivotOperation exitIdx enterIdx
 
-
-/-- Runs the Simplex Algorithm for linear optimization (maximize/minimize).
-This is a specialized variant of the standard `runSimplexAlgorithm` with the following
-key differences:
-
-1. **Objective extraction**: Instead of just finding feasibility, this extracts the optimal
-   objective value from the tableau's bottom-right corner `tableau.mat[(0, lastIdx)]!`.
-
-2. **Optimization focus**: Designed specifically for linear optimization problems where we
-   want to find the maximum or minimum value of a linear expression.
-
-3. **Success criteria**: Uses `checkLinearOptimSuccess` which verifies both feasibility
-   (non-negative basic variables) and optimality (non-positive reduced costs).
-
-This function should be used when you need to solve linear programming problems for
-optimization, as opposed to the standard `runSimplexAlgorithm` which focuses on feasibility. -/
-def runLinearOptimSimplex : SimplexAlgorithmM matType (Rat) := do
+/-- Runs the Simplex Algorithm for optimization problems using optimality checks.
+This is identical to `runSimplexAlgorithm` except it uses `checkLinearOptimSuccess`
+which verifies both feasibility and optimality conditions. -/
+def runSimplexAlgorithmOptim : SimplexAlgorithmM matType Unit := do
   while !(← checkLinearOptimSuccess) do
     Lean.Core.checkSystem decl_name%.toString
     let ⟨exitIdx, enterIdx⟩ ← choosePivots
     doPivotOperation exitIdx enterIdx
+
+/-- Solves a linear programming optimization problem and returns the optimal value.
+This function runs the optimization-focused simplex algorithm and extracts
+the optimal objective value from the final tableau.
+
+This function should be used when you need to solve linear programming problems for
+optimization, as opposed to the standard `runSimplexAlgorithm` which focuses on feasibility. -/
+def runLinearOptimSimplex : SimplexAlgorithmM matType Rat := do
+  runSimplexAlgorithmOptim
   let tableau ← get
   let lastIdx := tableau.free.size - 1
   return tableau.mat[(0, lastIdx)]!

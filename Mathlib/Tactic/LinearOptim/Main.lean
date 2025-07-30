@@ -71,7 +71,7 @@ def extractGoalScalingFactor (H : Expr) : MetaM ℕ := do
     return 1
 
 /-- Parse the linarith structure by turning hypotheses and goal into a matrix.
-Returns (List Comp, ℕ, ℕ) where the third component is the scaling factor applied to the goal. -/
+Returns `(comps, maxVar, goalScalingFactor) : List Comp × ℕ × ℕ`. -/
 partial def parseLinarithStructure (ty H : Expr) (g : MVarId)
     (cfg : TransparencyMode := .reducible) : MetaM (List Comp × ℕ × ℕ) := g.withContext do
   let hyps := H :: (← getLocalHyps).toList
@@ -87,21 +87,21 @@ end Preprocessing
 section MatrixPreprocessing
 
 def preprocessLinearOptim (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorithm matType]
-      (rH : Linarith.Comp) (rr : List Linarith.Comp) (maxVar : ℕ) :
-      matType (maxVar + 1) (rr.length + 1) :=
-    let hyps := rr ++ [rH]
-    let values : List (ℕ × ℕ × ℚ) :=
-      hyps.foldlIdx (init := []) fun idx cur comp =>
-      if idx == rr.length then
-        cur ++ comp.coeffs.map fun (var, c) =>
-          (var, idx, c * -1)
-      else if idx == rr.length - 1 then
-        cur ++ comp.coeffs.map fun (var, c) =>
-          (var, 0, c)
-      else
-        cur ++ comp.coeffs.map fun (var, c) =>
-          (var, idx + 1, c)
-    ofValues values
+    (rH : Linarith.Comp) (rr : List Linarith.Comp) (maxVar : ℕ) :
+    matType (maxVar + 1) (rr.length + 1) :=
+  let hyps := rr ++ [rH]
+  let values : List (ℕ × ℕ × ℚ) :=
+    hyps.foldlIdx (init := []) fun idx cur comp =>
+    if idx == rr.length then
+      cur ++ comp.coeffs.map fun (var, c) =>
+        (var, idx, c * -1)
+    else if idx == rr.length - 1 then
+      cur ++ comp.coeffs.map fun (var, c) =>
+        (var, 0, c)
+    else
+      cur ++ comp.coeffs.map fun (var, c) =>
+        (var, idx + 1, c)
+  ofValues values
 
 
 end MatrixPreprocessing

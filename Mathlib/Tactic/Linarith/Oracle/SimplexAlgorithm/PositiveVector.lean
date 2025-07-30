@@ -106,7 +106,7 @@ The matrix A represents the constraints in standard form.
 This is a variant of `findPositiveVector` specialized for linear optimization. -/
 def simplexOptimalBound {n m : Nat} {matType : Nat → Nat → Type}
     [UsableInSimplexAlgorithm matType] (A : matType n m) :
-    Lean.Meta.MetaM <| Rat := do
+    Lean.Meta.MetaM Rat := do
   -- State the linear programming problem.
   -- Using Gaussian elimination split variable into free and basic forming the tableau
   -- that will be operated by the Simplex Algorithm.
