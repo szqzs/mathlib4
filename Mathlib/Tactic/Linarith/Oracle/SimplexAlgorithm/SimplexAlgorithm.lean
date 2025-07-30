@@ -80,23 +80,14 @@ def checkLinearOptimSuccess : SimplexAlgorithmM matType Bool := do
   let tableau ← get
   let lastIdx := tableau.free.size - 1
   -- First check feasibility: all basic variables must be non-negative
-  let feasible ← tableau.basic.size.allM (fun i _ => do
-    if i ≠ 0 then
-      let val := tableau.mat[(i, lastIdx)]!
-      return val ≥ 0
-    else
-      return true
-    )
+  let feasible := tableau.basic.size.all 
+    (fun i _ => i = 0 || tableau.mat[(i, lastIdx)]! ≥ 0)
   if not feasible then
     return false
   -- Check optimality: all reduced costs should be ≤ 0 for maximization
   -- (Skip the last column which is RHS)
-  let optimal ← tableau.free.size.allM (fun j _ => do
-    if j == lastIdx then
-      return true  -- Skip RHS column
-    else
-      let val := tableau.mat[(0, j)]!
-      return val ≤ 0)  -- All reduced costs ≤ 0
+  let optimal := tableau.free.size.all (fun j _ => 
+    j == lastIdx || tableau.mat[(0, j)]! ≤ 0)  -- All reduced costs ≤ 0
   return optimal
 
 /--
@@ -176,16 +167,10 @@ key differences:
 This function should be used when you need to solve linear programming problems for
 optimization, as opposed to the standard `runSimplexAlgorithm` which focuses on feasibility. -/
 def runLinearOptimSimplex : SimplexAlgorithmM matType (Rat) := do
-  -- let mut iteration : Nat := 0
   while !(← checkLinearOptimSuccess) do
-    -- iteration := iteration + 1
     Lean.Core.checkSystem decl_name%.toString
     let ⟨exitIdx, enterIdx⟩ ← choosePivots
     doPivotOperation exitIdx enterIdx
-    -- Safety check to prevent infinite loops
-    -- if iteration > 1000 then
-    --   throwError "LinearOptim: Too many simplex iterations ({iteration}), \
-    --     possibly inconsistent constraints or numerical issues"
   let tableau ← get
   let lastIdx := tableau.free.size - 1
   return tableau.mat[(0, lastIdx)]!

@@ -47,8 +47,7 @@ def findNonzeroRow (rowStart col : Nat) : GaussM n m matType <| Option Nat := do
   for i in candidates do
     let pivot := mat[(i, col)]!
     let rhs := -mat[(i, lastCol)]!
-    let basicVarValue := rhs / pivot
-    if basicVarValue >= 0 then
+    if (rhs >= 0 && pivot > 0) || (rhs <= 0 && pivot < 0) then
       return i
   
   -- Second pass: if no feasible pivot exists, decide whether to skip or use first candidate

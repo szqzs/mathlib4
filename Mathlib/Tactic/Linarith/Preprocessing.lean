@@ -410,7 +410,7 @@ Note that a preprocessor may produce multiple or no expressions from each input 
 so the size of the list may change.
 This is a variant of `preprocess` for simple `Preprocessor`s rather than
 ``GlobalBranchingPreprocessor`s. It is designed for maximize and minimize tactics in LinearOptim. -/
-def preprocessSimple (pps : List Preprocessor) (l : List Expr) : MetaM (List Expr) := do
+def preprocessSimple (pps : List Preprocessor) (l : List Expr) : MetaM (List Expr) :=
   pps.foldlM (init := l) fun ls pp => pp.globalize.transform ls
 
 end Mathlib.Tactic.Linarith
