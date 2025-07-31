@@ -99,11 +99,8 @@ def findPositiveVector {n m : Nat} {matType : Nat → Nat → Type} [UsableInSim
   else
     throwError "Simplex Algorithm failed"
 
-/-- Returns the negative of the optimal value of the linear programming problem defined by matrix A.
-For a maximization problem, this gives the negative of the maximum value.
-For a minimization problem, this gives the negative of the minimum value.
-The matrix A represents the constraints in standard form.
-This is a variant of `findPositiveVector` specialized for linear optimization. -/
+/-- Returns the optimal value of the linear system defined by matrix A.
+This is a variant of `findPositiveVector` specialized for finding the optimum value. -/
 def simplexOptimalBound {n m : Nat} {matType : Nat → Nat → Type}
     [UsableInSimplexAlgorithm matType] (A : matType n m) :
     Lean.Meta.MetaM Rat := do

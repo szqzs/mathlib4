@@ -80,6 +80,26 @@ example (x y z : ℚ) (h1 : x + y > -7) (h2 : 3 * y + 4 * z > -2) (h3 : x - y + 
   minimize x - y + z with H
   trivial
 
+/-- info: Try this: have H : -28 / 9 ≤ x + 5 * y + 2 * z := by linarith -/
+#guard_msgs in
+example (x y z : ℚ) (h1 : x + y + z > -7) (h2 : x + 3 * y + 4 * z > -2)
+    (h3 : x + 10 * y + z > -1) : True := by
+  minimize x + 5 * y + 2 * z with H
+  trivial
+
+/-- info: Try this: have T : 18 / 5 ≤ -x - 5 * y - 2 * z := by linarith -/
+#guard_msgs in
+example (x y z : ℚ) (h1 : x + y + 2 * z < -7) (h2 : x + 3 * y + 4 * z < -2)
+    (h3 : x + 10 * y + z < -1) : True := by
+  minimize -x - 5 * y - 2 * z with T
+  trivial
+
+/-- info: Try this: have F : -1 ≤ x := by linarith -/
+#guard_msgs in
+example (x : ℚ) (h : x > -1) : True := by
+  minimize x with F
+  trivial
+
 /-- info: Try this: have H : -47 / 5 ≤ x + 7 * y := by linarith -/
 #guard_msgs in
 example (x y : ℚ) (h1 : x + y > -10) (h2 : x + 11 * y > -9) : True := by
@@ -316,4 +336,246 @@ example (x : ℚ) (h2 : x < -5) :  True := by
 #guard_msgs in
 example (x : ℚ) (h2 : x > 0) (h1 : x < -5):  True := by
   maximize x with H
+  trivial
+
+-- Test that should fail: inconsistent constraints minimize
+/-- error: minimize: a lower bound cannot be produced for x.
+    The constraints may be inconsistent or the expression may be unbounded. -/
+#guard_msgs in
+example (x : ℚ) (h2 : x < 0) (h1 : x > 5):  True := by
+  minimize x with H
+  trivial
+
+-- TESTS FOR OPTIONAL WITH CLAUSE
+
+-- Test maximize without with clause
+/-- info: Try this: have : 4 * x + y ≤ 6 := by linarith -/
+#guard_msgs in
+example (x y : ℚ) (h1 : 3 * x + y < 4) (h2 : x < 2) : True := by
+  maximize 4 * x + y
+  trivial
+
+-- Test minimize without with clause
+/-- info: Try this: have : -6 ≤ 4 * x + y := by linarith -/
+#guard_msgs in
+example (x y : ℚ) (h1 : 3 * x + y > -4) (h2 : x > -2) : True := by
+  minimize 4 * x + y
+  trivial
+
+-- Test mixed usage: with and without with clause in same proof
+/-- info: Try this: have : x + y ≤ 5 := by linarith
+---
+info: Try this: have H : 2 * x + y ≤ 8 := by linarith -/
+#guard_msgs in
+example (x y : ℚ) (h1 : x + y < 5) (h2 : x < 3) : True := by
+  maximize x + y  -- anonymous
+  maximize 2 * x + y with H  -- named
+  trivial
+
+-- Test complex expression without with clause
+/-- info: Try this: have : x + 5 * y + 2 * z ≤ 28 / 9 := by linarith -/
+#guard_msgs in
+example (x y z : ℚ) (h1 : x + y + z < 7) (h2 : x + 3 * y + 4 * z < 2)
+    (h3 : x + 10 * y + z < 1) : True := by
+  maximize x + 5 * y + 2 * z
+  trivial
+
+-- COMPREHENSIVE TESTS FOR OPTIONAL WITH CLAUSE FEATURE
+
+-- Test 1: Basic maximize without with clause
+/-- info: Try this: have : x ≤ 10 := by linarith -/
+#guard_msgs in
+example (x : ℚ) (h : x < 10) : True := by
+  maximize x
+  trivial
+
+-- Test 2: Basic minimize without with clause
+/-- info: Try this: have : 5 ≤ x := by linarith -/
+#guard_msgs in
+example (x : ℚ) (h : x > 5) : True := by
+  minimize x
+  trivial
+
+-- Test 3: Complex expression maximize without with clause
+/-- info: Try this: have : 3 * x + 2 * y ≤ 21 := by linarith -/
+#guard_msgs in
+example (x y : ℚ) (h1 : x < 5) (h2 : y < 3) : True := by
+  maximize 3 * x + 2 * y
+  trivial
+
+-- Test 4: Complex expression minimize without with clause
+/-- info: Try this: have : -10 ≤ 2 * x - y := by linarith -/
+#guard_msgs in
+example (x y : ℚ) (h1 : x > -2) (h2 : y < 6) : True := by
+  minimize 2 * x - y
+  trivial
+
+-- Test 5: Verify backward compatibility - old syntax still works
+/-- info: Try this: have old_bound : x + y ≤ 12 := by linarith -/
+#guard_msgs in
+example (x y : ℚ) (h1 : x < 7) (h2 : y < 5) : True := by
+  maximize x + y with old_bound
+  trivial
+
+-- Test 6: Multiple anonymous calls in sequence
+/-- info: Try this: have : x ≤ 5 := by linarith
+---
+info: Try this: have : y ≤ 3 := by linarith
+---
+info: Try this: have : x + y ≤ 8 := by linarith -/
+#guard_msgs in
+example (x y : ℚ) (h1 : x < 5) (h2 : y < 3) : True := by
+  maximize x
+  maximize y  
+  maximize x + y
+  trivial
+
+-- Test 7: Multiple named calls in sequence
+/-- info: Try this: have bound_x : x ≤ 5 := by linarith
+---
+info: Try this: have bound_y : y ≤ 3 := by linarith
+---
+info: Try this: have bound_sum : x + y ≤ 8 := by linarith -/
+#guard_msgs in
+example (x y : ℚ) (h1 : x < 5) (h2 : y < 3) : True := by
+  maximize x with bound_x
+  maximize y with bound_y
+  maximize x + y with bound_sum
+  trivial
+
+-- Test 8: Mixed named and anonymous in complex proof
+/-- info: Try this: have : x ≤ 10 := by linarith
+---
+info: Try this: have y_bound : y ≤ 5 := by linarith
+---
+info: Try this: have : x + y ≤ 15 := by linarith
+---
+info: Try this: have z_bound : z ≤ 2 := by linarith -/
+#guard_msgs in
+example (x y z : ℚ) (h1 : x < 10) (h2 : y < 5) (h3 : z < 2) : True := by
+  maximize x                    -- anonymous
+  maximize y with y_bound       -- named  
+  maximize x + y                -- anonymous
+  maximize z with z_bound       -- named
+  trivial
+
+-- Test 9: Anonymous bounds used in subsequent reasoning
+/-- info: Try this: have : x + y ≤ 8 := by linarith -/
+#guard_msgs in
+example (x y : ℚ) (h1 : x < 5) (h2 : y < 3) : x + y < 10 := by
+  maximize x + y
+  linarith
+
+-- Test 10: Named bounds used in subsequent reasoning  
+/-- info: Try this: have max_bound : x + y ≤ 8 := by linarith -/
+#guard_msgs in
+example (x y : ℚ) (h1 : x < 5) (h2 : y < 3) : x + y ≤ 9 := by
+  maximize x + y with max_bound
+  linarith [max_bound]
+
+-- Test 11: Minimize without with clause in complex constraints
+/-- info: Try this: have : -15 ≤ 3 * x + 2 * y := by linarith -/
+#guard_msgs in
+example (x y : ℚ) (h1 : x > -5) (h2 : y > 0) : True := by
+  minimize 3 * x + 2 * y
+  trivial
+
+-- Test 12: Multiple minimize calls without with clause
+/-- info: Try this: have : 2 ≤ x := by linarith
+---
+info: Try this: have : -3 ≤ y := by linarith
+---
+info: Try this: have : -1 ≤ x + y := by linarith -/
+#guard_msgs in
+example (x y : ℚ) (h1 : x > 2) (h2 : y > -3) : True := by
+  minimize x
+  minimize y
+  minimize x + y
+  trivial
+
+-- Test 13: Mixed maximize and minimize without with clause
+/-- info: Try this: have : x ≤ 10 := by linarith
+---
+info: Try this: have : 5 ≤ y := by linarith
+---
+info: Try this: have : 8 ≤ x + y := by linarith -/
+#guard_msgs in
+example (x y : ℚ) (h1 : x < 10) (h2 : y > 5) (h3 : x > 3) : True := by
+  maximize x        -- anonymous maximize
+  minimize y        -- anonymous minimize  
+  minimize x + y    -- anonymous minimize (now has proper lower bound)
+  trivial
+
+-- Test 14: Complex mixed usage with both syntaxes
+/-- info: Try this: have : x ≤ 8 := by linarith
+---
+info: Try this: have min_y : 3 ≤ y := by linarith
+---
+info: Try this: have min_sum : 5 ≤ x + y := by linarith -/
+#guard_msgs in
+example (x y : ℚ) (h1 : x < 8) (h2 : y > 3) (h3 : x > 2) : True := by
+  maximize x                      -- anonymous
+  minimize y with min_y           -- named
+  minimize x + y with min_sum     -- named (now has proper lower bound)
+  trivial
+
+-- Test 15: Fractional expressions without with clause
+/-- info: Try this: have : x / 3 + y / 2 ≤ 7 := by linarith -/
+#guard_msgs in
+example (x y : ℚ) (h1 : x < 12) (h2 : y < 6) : True := by
+  maximize x / 3 + y / 2
+  trivial
+
+-- Test 16: Verify different identifier names work with optional syntax
+/-- info: Try this: have upper_bound : x * 2 + y * 3 ≤ 25 := by linarith -/
+#guard_msgs in
+example (x y : ℚ) (h1 : x < 5) (h2 : y < 5) : True := by
+  maximize x * 2 + y * 3 with upper_bound
+  trivial
+
+-- Test 17: Single variable cases - both syntaxes
+/-- info: Try this: have : a ≤ 100 := by linarith
+---
+info: Try this: have single_var_bound : b ≤ 50 := by linarith -/
+#guard_msgs in
+example (a b : ℚ) (h1 : a < 100) (h2 : b < 50) : True := by
+  maximize a                        -- anonymous single var
+  maximize b with single_var_bound  -- named single var
+  trivial
+
+-- Test 18: Error cases - unbounded expressions (should still work for both syntaxes)
+/-- error: maximize: an upper bound cannot be produced for x.
+    The constraints may be inconsistent or the expression may be unbounded. -/
+#guard_msgs in
+example (x : ℚ) (h : x > 0) : True := by
+  maximize x  -- Should fail - unbounded without with clause
+  trivial
+
+/-- error: maximize: an upper bound cannot be produced for x.
+    The constraints may be inconsistent or the expression may be unbounded. -/
+#guard_msgs in
+example (x : ℚ) (h : x > 0) : True := by
+  maximize x with H  -- Should fail - unbounded with with clause
+  trivial
+
+-- Test 19: Verify minimize error cases work with both syntaxes
+/-- error: minimize: a lower bound cannot be produced for x.
+    The constraints may be inconsistent or the expression may be unbounded. -/
+#guard_msgs in
+example (x : ℚ) (h : x < 0) : True := by
+  minimize x  -- Should fail - unbounded minimize without with clause
+  trivial
+
+/-- error: minimize: a lower bound cannot be produced for x.
+    The constraints may be inconsistent or the expression may be unbounded. -/
+#guard_msgs in
+example (x : ℚ) (h : x < 0) : True := by
+  minimize x with H  -- Should fail - unbounded minimize with with clause
+  trivial
+
+-- Test 20: Large expressions without with clause
+/-- info: Try this: have : a + 2 * b + 3 * c + 4 * d ≤ 30 := by linarith -/
+#guard_msgs in
+example (a b c d : ℚ) (h1 : a < 5) (h2 : b < 4) (h3 : c < 3) (h4 : d < 2) : True := by
+  maximize a + 2 * b + 3 * c + 4 * d
   trivial
