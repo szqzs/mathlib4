@@ -137,7 +137,7 @@ section TacticImplementation
 
 
 /-- The `maximize` tactic finds an upper bound for a linear expression. -/
-elab "maximize" e_stx:term h_stx:(withArg)? : tactic => do
+elab "maximize" e_stx:term h_stx:(withArgs)? : tactic => do
   let e_exp : Expr ← Elab.Tactic.elabTerm e_stx none
   -- Wrap the bound computation in try-catch
   let bound ← try
@@ -157,7 +157,7 @@ elab "maximize" e_stx:term h_stx:(withArg)? : tactic => do
   Elab.Tactic.evalTactic tacticStx
 
 /-- The `minimize` tactic finds a lower bound for a linear expression. -/
-elab "minimize" e_stx:term h_stx:(withArg)? : tactic => do
+elab "minimize" e_stx:term h_stx:(withArgs)? : tactic => do
   let e_exp : Expr ← Elab.Tactic.elabTerm e_stx none
   -- Wrap the bound computation in try-catch
   let bound ← try
