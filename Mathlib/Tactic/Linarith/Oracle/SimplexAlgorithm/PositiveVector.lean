@@ -100,6 +100,29 @@ def findPositiveVector {n m : Nat} {matType : Nat → Nat → Type} [UsableInSim
     throwError "Simplex Algorithm failed"
 
 /-- Returns the optimal value of the linear system defined by matrix A.
+
+Matrix A encodes a linear programming problem in standard form as follows:
+
+**Matrix Structure:**
+- A is an (n+1) × (m+1) matrix where the linear program has n constraints and (m-1) variables
+  x₁, x₂, ..., x_{m-1}
+- The first column is always (-1, 0, 0, ..., 0)ᵀ (only the top-left entry matters)
+- The remaining structure defines the optimization problem
+
+**Constraint System:**
+Let B be the matrix obtained by removing the first row and first column from A.
+Each row i of B represents an equality constraint:
+- If row i of B is (a₁, a₂, ..., a_{m-1}, aₘ), then the constraint is:
+  a₁·x₁ + a₂·x₂ + ... + a_{m-1}·x_{m-1} + aₘ = 0
+
+**Objective Function:**
+The first row of A (excluding the first entry) defines the objective function to maximize:
+- If the first row is (-1, a₁, a₂, ..., aₘ), then we maximize:
+  z = -a₁·x₁ - a₂·x₂ - ... - a_{m-1}·x_{m-1} + aₘ
+
+**Returns:** The optimal value z* of the maximization problem, or fails if the problem is
+unbounded or infeasible.
+
 This is a variant of `findPositiveVector` specialized for finding the optimum value. -/
 def simplexOptimalBound {n m : Nat} {matType : Nat → Nat → Type}
     [UsableInSimplexAlgorithm matType] (A : matType n m) :
