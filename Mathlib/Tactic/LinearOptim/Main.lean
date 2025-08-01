@@ -53,34 +53,22 @@ namespace Mathlib.Tactic.LinearOptim
 
 section Preprocessing
 
-
-/-- Extract the scaling factor that CancelDenoms applies to the goal expression.
-Returns 1 if no scaling is applied. -/
-def extractGoalScalingFactor (H : Expr) : MetaM ℕ := do
-  try
-    let goalType ← inferType H
-    let (_, lhs) ← parseCompAndExpr goalType
-    let containsDiv := lhs.containsConst fun n =>
-      n = ``HDiv.hDiv || n = ``Div.div || n = ``Inv.inv || n == ``OfScientific.ofScientific
-
-    if containsDiv then
-      let (scalingFactor, _) ← CancelDenoms.derive lhs
-      return scalingFactor
-    else
-      return 1
-  catch _ =>
-    return 1
-
 /-- Parse the linarith structure by turning hypotheses and goal into a matrix.
-Returns `(comps, maxVar, goalScalingFactor) : List Comp × ℕ × ℕ`. -/
+Returns `(comps, maxVar, goalScalingFactor) : List Comp × ℕ × ℤ. -/
 partial def parseLinarithStructure (ty H : Expr) (g : MVarId)
-    (cfg : TransparencyMode := .reducible) : MetaM (List Comp × ℕ × ℕ) := g.withContext do
+    (cfg : TransparencyMode := .reducible) : MetaM (List Comp × ℕ × ℤ) := g.withContext do
   let hyps := H :: (← getLocalHyps).toList
-  let goalScalingFactor ← extractGoalScalingFactor H
   let es ← Linarith.preprocessSimple Linarith.defaultLinearOptimPreprocessors hyps
   let hypSet ← es.filterM (fun h => return ty == (← typeOfIneqProof h))
   let (comps, maxVar, _) ← Mathlib.Tactic.Linarith.getLinearCombinations cfg hypSet
-  return (comps, maxVar, goalScalingFactor)
+  -- The `computeOptimalBound` function creates a dummy hypothesis of the form `e < 1`.
+  -- The `cancelDenoms` preprocessor transforms this into `k*e < k`, which is then
+  -- normalized to `k*e - k < 0`. Linarith's parser treats the constant `-k`
+  -- as the coefficient of a special variable with index 0.
+  -- We extract this coefficient and negate it to recover the scaling factor `k`.
+  let goalComp := comps.getLast!
+  let scalingFactor := - goalComp.coeffs.zfind 0
+  return (comps, maxVar, scalingFactor)
 
 end Preprocessing
 
@@ -112,28 +100,38 @@ section BoundComputation
 /-- Compute the optimal bound (upper bound for maximization, lower bound for minimization).
 Returns the optimal bound as a rational number. -/
 def computeOptimalBound (e_exp : Expr) (isMaximize : Bool) (g : MVarId) : MetaM ℚ := do
-  let ⟨u, ty, e_exp⟩ ← inferTypeQ' e_exp -- `ty : Q(Type u)`, `e_exp : Q($ty)`
+  let ⟨u, ty, e_exp⟩ ← inferTypeQ' e_exp
   let _i ← synthInstanceQ q(PartialOrder $ty)
-  let _i ← synthInstanceQ q(Semiring $ty)
+  let _i ← synthInstanceQ q(Ring $ty) -- Use Ring to ensure negation is available
   assumeInstancesCommute
-  let H := if isMaximize then
-    q(show $e_exp < 0 from sorry)
+  -- To find max(e), we run the pipeline on `e`.
+  -- To find min(e), we run the pipeline on `-e` and use the identity min(e) = -max(-e).
+  let target_exp := if isMaximize then e_exp else q(-$e_exp)
+  -- The dummy hypothesis is always `< 1` to ensure the scaling factor `k` is positive
+  -- and that the Comp object represents `k*E - k`.
+  let H := q(show $target_exp < 1 from sorry)
+  let (comps, maxVar, scalingFactor) ← parseLinarithStructure ty H g
+  let rH :: rr := comps.reverse | failure
+  let A := preprocessLinearOptim DenseMatrix rH rr maxVar
+  let r_opt ← Linarith.SimplexAlgorithm.simplexOptimalBound A
+  let k_q : ℚ := scalingFactor
+  -- This derivation is based on the solver pipeline.
+  -- The pipeline takes a Comp for `k*E - k` and returns `r_opt = min(-(k*E - k))`.
+  -- This can be solved to show that `max(E) = (k - r_opt) / k`.
+  let max_of_target := (k_q - r_opt) / k_q
+  if isMaximize then
+    -- The target was `e`, so we have found `max(e)`.
+    return max_of_target
   else
-    q(show $e_exp > 0 from sorry)
-  -- Turn both the hypotheses and goal into a matrix r and a number n for atoms
-  let (r, n, scalingFactor) ← parseLinarithStructure ty H g
-  -- Split off the goal vector rH from the matrix r and leave the hypothesis matrix rr
-  let rH :: rr := r.reverse | failure
+    -- The target was `-e`. We found `max(-e)`.
+    -- So we return `-max(-e)` to get `min(e)`.
+    return -max_of_target
 
-  let A := preprocessLinearOptim DenseMatrix rH rr n
-  let r ← Linarith.SimplexAlgorithm.simplexOptimalBound A
-  let scaledR := r / scalingFactor
-  return (if isMaximize then -scaledR else scaledR)
 
 end BoundComputation
 
-section TacticImplementation
 
+section TacticImplementation
 
 
 /-- The `maximize` tactic finds an upper bound for a linear expression. -/
