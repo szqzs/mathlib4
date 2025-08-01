@@ -104,8 +104,8 @@ def findPositiveVector {n m : Nat} {matType : Nat → Nat → Type} [UsableInSim
 Matrix `A` encodes a linear programming problem in standard form as follows:
 
 **Matrix Structure:**
-- `A` is an `(n+1) × (m+1)` matrix where the linear program has `n` constraints and `(m-1)` variables
-  `x₁, x₂, ..., x_{m-1}`
+- `A` is an `(n+1) × (m+1)` matrix where the linear program has `n` constraints and
+  `(m-1)` variables `x₁, x₂, ..., x_{m-1}`
 - The first column is always `(-1, 0, 0, ..., 0)ᵀ` (only the top-left entry matters)
 - The remaining structure defines the optimization problem
 
