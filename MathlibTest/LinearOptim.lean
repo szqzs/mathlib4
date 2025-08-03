@@ -229,7 +229,7 @@ example (x y : ℚ) (h1 : x + y < 10) (h2 : y > 4) : True := by
 
 -- Test that should fail: unbounded maximize
 /-- error: maximize: an upper bound cannot be produced for x.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+    The expression may be unbounded. -/
 #guard_msgs in
 example (x : ℚ) (h1 : x > 0) : True := by
   maximize x with H
@@ -237,7 +237,7 @@ example (x : ℚ) (h1 : x > 0) : True := by
 
 -- Test that should fail: unbounded minimize
 /-- error: minimize: a lower bound cannot be produced for x.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+    The expression may be unbounded. -/
 #guard_msgs in
 example (x : ℚ) (h1 : x < 0) : True := by
   minimize x with H
@@ -247,7 +247,7 @@ example (x : ℚ) (h1 : x < 0) : True := by
 
 -- Test that should fail: unbounded expression
 /-- error: maximize: an upper bound cannot be produced for 5 * x + 3 * y.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+    The expression may be unbounded. -/
 #guard_msgs in
 example (x y : ℚ) (h1 : 3 * x + y ≤ 7) (h2 : x < 6) : True := by
   maximize 5 * x + 3 * y with H
@@ -315,7 +315,7 @@ example (x : ℚ) (h1 : x < 10) (h2 : x > 0) : True := by
 
 -- Test that should fail: unbounded expression
 /-- error: maximize: an upper bound cannot be produced for x.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+    The expression may be unbounded. -/
 #guard_msgs in
 example (x : ℚ) (h2 : x > 0) :  True := by
   maximize x with H
@@ -330,9 +330,9 @@ example (x : ℚ) (h2 : x < -5) :  True := by
   maximize x with H
   trivial
 
--- Test that should succeed: bounded expression
+-- Test that should fail: inconsistent constraints minimize
 /-- error: maximize: an upper bound cannot be produced for x.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+    The constraints may be inconsistent. -/
 #guard_msgs in
 example (x : ℚ) (h2 : x > 0) (h1 : x < -5):  True := by
   maximize x with H
@@ -340,10 +340,121 @@ example (x : ℚ) (h2 : x > 0) (h1 : x < -5):  True := by
 
 -- Test that should fail: inconsistent constraints minimize
 /-- error: minimize: a lower bound cannot be produced for x.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+    The constraints may be inconsistent. -/
 #guard_msgs in
 example (x : ℚ) (h2 : x < 0) (h1 : x > 5):  True := by
   minimize x with H
+  trivial
+
+ -- Test that should fail: inconsistent constraints and unbounded expressions maximize
+ -- Because there is hypotehsis h3 that involves y, the algorithm won't detect unboundedness from
+ -- the lack of contrainst on y first. Thus it detects inconsistent constraints first thus the error
+ -- message should say that.
+/-- error: maximize: an upper bound cannot be produced for y + x.
+    The constraints may be inconsistent. -/
+#guard_msgs in
+example (x y : ℚ) (h2 : x < 0) (h1 : x > 5) (h3 : y > 10):  True := by
+  maximize y + x with H
+  trivial
+
+ -- Test that should fail: inconsistent constraints and unbounded expressions maximize
+/-- error: maximize: an upper bound cannot be produced for x + y.
+    The constraints may be inconsistent. -/
+#guard_msgs in
+example (x y : ℚ) (h2 : x < 0) (h1 : x > 5) (h3 : y > 10):  True := by
+  maximize x + y with H
+  trivial
+
+ -- Test that should fail: unbounded expressions maximize
+/-- error: maximize: an upper bound cannot be produced for y + x.
+    The expression may be unbounded. -/
+#guard_msgs in
+example (x y : ℚ) (h1 : x > 5) (h3 : y > 10):  True := by
+  maximize y + x with H
+  trivial
+
+ -- Test that should fail: unbounded expressions maximize
+/-- error: maximize: an upper bound cannot be produced for x + y.
+    The expression may be unbounded. -/
+#guard_msgs in
+example (x y z : ℚ) (h1 : x > 5) (h3 : y > 10):  True := by
+  maximize x + y with H
+  trivial
+
+ -- Test that should fail: inconsistent constraints and unbounded expressions minimize
+ -- In this case, the algorithm detects inconsistent constraints first thus the error message should
+ -- say that.
+/-- error: minimize: a lower bound cannot be produced for y + x.
+    The constraints may be inconsistent. -/
+#guard_msgs in
+example (x y : ℚ) (h2 : x < 0) (h1 : x > 5) (h3 : y < 10):  True := by
+  minimize y + x with H
+  trivial
+
+ -- Test that should fail: inconsistent constraints and unbounded expressions minimize
+/-- error: minimize: a lower bound cannot be produced for x + y.
+    The constraints may be inconsistent. -/
+#guard_msgs in
+example (x y : ℚ) (h2 : x < 0) (h1 : x > 5) (h3 : y < 10):  True := by
+  minimize x + y with H
+  trivial
+
+ -- Test that should fail: inconsistent constraints and unbounded expressions
+ -- In this case, because there is hypothesis involving y, the algorithm detects unbounded
+ -- expressions first.
+/-- error: maximize: an upper bound cannot be produced for y.
+    The expression may be unbounded. -/
+#guard_msgs in
+example (x y : ℚ) (h2 : x > 0) (h1 : y >= 7):  True := by
+  maximize y with H
+  trivial
+
+ -- Test that should fail: inconsistent constraints and unbounded expressions
+/-- error: maximize: an upper bound cannot be produced for y.
+    The expression may be unbounded. -/
+#guard_msgs in
+example (x y : ℚ) (h2 : x < 0) (h1 : x > 7):  True := by
+  maximize y with H
+  trivial
+
+ -- Test that should fail: inconsistent constraints and unbounded expressions
+/-- error: maximize: an upper bound cannot be produced for -y.
+    The expression may be unbounded. -/
+#guard_msgs in
+example (x y : ℚ) (h2 : x < 0) (h1 : x > 7):  True := by
+  maximize -y with H
+  trivial
+
+ -- Test that should fail: inconsistent constraints and unbounded expressions
+/-- error: maximize: an upper bound cannot be produced for x.
+    The expression may be unbounded. -/
+#guard_msgs in
+example (x y : ℚ) (h2 : y < 0) (h1 : y > 7):  True := by
+  maximize x with H
+  trivial
+
+ -- Test that should fail: inconsistent constraints
+/-- error: maximize: an upper bound cannot be produced for y.
+    The expression may be unbounded. -/
+#guard_msgs in
+example (x y : ℚ) (h2 : x < 0):  True := by
+  maximize y with H
+  trivial
+
+ -- Test that should fail: inconsistent constraints
+/-- error: maximize: an upper bound cannot be produced for x + y.
+    The expression may be unbounded. -/
+#guard_msgs in
+example (x y z : ℚ) (h2 : y > 5) :  True := by
+  maximize x + y
+  trivial
+
+ -- Test that should fail: inconsistent constraints
+/-- error: maximize: an upper bound cannot be produced for x + y.
+    The expression may be unbounded. -/
+#guard_msgs in
+example (x y : ℚ) (h1 : x > 0) (h2 : y <= 5) (h3: y > 9):  True := by
+  maximize x + y
   trivial
 
 -- TESTS FOR OPTIONAL WITH CLAUSE
@@ -426,7 +537,7 @@ info: Try this: have : x + y ≤ 8 := by linarith -/
 #guard_msgs in
 example (x y : ℚ) (h1 : x < 5) (h2 : y < 3) : True := by
   maximize x
-  maximize y  
+  maximize y
   maximize x + y
   trivial
 
@@ -454,7 +565,7 @@ info: Try this: have z_bound : z ≤ 2 := by linarith -/
 #guard_msgs in
 example (x y z : ℚ) (h1 : x < 10) (h2 : y < 5) (h3 : z < 2) : True := by
   maximize x                    -- anonymous
-  maximize y with y_bound       -- named  
+  maximize y with y_bound       -- named
   maximize x + y                -- anonymous
   maximize z with z_bound       -- named
   trivial
@@ -466,7 +577,7 @@ example (x y : ℚ) (h1 : x < 5) (h2 : y < 3) : x + y < 10 := by
   maximize x + y
   linarith
 
--- Test 10: Named bounds used in subsequent reasoning  
+-- Test 10: Named bounds used in subsequent reasoning
 /-- info: Try this: have max_bound : x + y ≤ 8 := by linarith -/
 #guard_msgs in
 example (x y : ℚ) (h1 : x < 5) (h2 : y < 3) : x + y ≤ 9 := by
@@ -502,7 +613,7 @@ info: Try this: have : 8 ≤ x + y := by linarith -/
 #guard_msgs in
 example (x y : ℚ) (h1 : x < 10) (h2 : y > 5) (h3 : x > 3) : True := by
   maximize x        -- anonymous maximize
-  minimize y        -- anonymous minimize  
+  minimize y        -- anonymous minimize
   minimize x + y    -- anonymous minimize (now has proper lower bound)
   trivial
 
@@ -545,14 +656,14 @@ example (a b : ℚ) (h1 : a < 100) (h2 : b < 50) : True := by
 
 -- Test 18: Error cases - unbounded expressions (should still work for both syntaxes)
 /-- error: maximize: an upper bound cannot be produced for x.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+    The expression may be unbounded. -/
 #guard_msgs in
 example (x : ℚ) (h : x > 0) : True := by
   maximize x  -- Should fail - unbounded without with clause
   trivial
 
 /-- error: maximize: an upper bound cannot be produced for x.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+    The expression may be unbounded. -/
 #guard_msgs in
 example (x : ℚ) (h : x > 0) : True := by
   maximize x with H  -- Should fail - unbounded with with clause
@@ -560,14 +671,14 @@ example (x : ℚ) (h : x > 0) : True := by
 
 -- Test 19: Verify minimize error cases work with both syntaxes
 /-- error: minimize: a lower bound cannot be produced for x.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+    The expression may be unbounded. -/
 #guard_msgs in
 example (x : ℚ) (h : x < 0) : True := by
   minimize x  -- Should fail - unbounded minimize without with clause
   trivial
 
 /-- error: minimize: a lower bound cannot be produced for x.
-    The constraints may be inconsistent or the expression may be unbounded. -/
+    The expression may be unbounded. -/
 #guard_msgs in
 example (x : ℚ) (h : x < 0) : True := by
   minimize x with H  -- Should fail - unbounded minimize with with clause

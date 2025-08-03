@@ -126,17 +126,21 @@ unbounded or infeasible.
 This is a variant of `findPositiveVector` specialized for finding the optimum value. -/
 def simplexOptimalBound {n m : Nat} {matType : Nat → Nat → Type}
     [UsableInSimplexAlgorithm matType] (A : matType n m) :
-    Lean.Meta.MetaM Rat := do
+    Lean.Meta.MetaM (Except SimplexAlgorithmException Rat) := do
   -- State the linear programming problem.
   -- Using Gaussian elimination split variable into free and basic forming the tableau
   -- that will be operated by the Simplex Algorithm.
   let initTableau ← Gauss.getTableau A
-  -- Run the Simplex Algorithm and extract the solution.
-  let res ← runLinearOptimSimplex.run initTableau
-  match res.fst with
-  | .ok r =>
-    return r
-  | .error _e =>
-    throwError "Simplex Algorithm failed"
+  -- If the last column is chosen as a basic variable, then the linear expression we want to
+  -- optimize contains variable that doesn't appear in the hypotheses, so return unbounded error
+  if (initTableau.basic.findIdx? (· == m - 1)).isSome then
+    return Except.error SimplexAlgorithmException.unbounded
+  else
+    -- Run the Simplex Algorithm and extract the solution.
+    let res ← runLinearOptimSimplex.run initTableau
+    match res.fst with
+    | .ok r =>
+      return Except.ok r
+    | .error e => return Except.error e
 
 end Mathlib.Tactic.Linarith.SimplexAlgorithm

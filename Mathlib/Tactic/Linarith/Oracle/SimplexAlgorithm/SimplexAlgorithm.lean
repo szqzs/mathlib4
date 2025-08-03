@@ -18,6 +18,8 @@ namespace Mathlib.Tactic.Linarith.SimplexAlgorithm
 inductive SimplexAlgorithmException
   /-- The solution is infeasible. -/
 | infeasible : SimplexAlgorithmException
+  /-- The solution is unbounded. -/
+| unbounded : SimplexAlgorithmException
 
 /-- The monad for the Simplex Algorithm. -/
 abbrev SimplexAlgorithmM (matType : Nat → Nat → Type) [UsableInSimplexAlgorithm matType] :=
@@ -80,13 +82,13 @@ def checkLinearOptimSuccess : SimplexAlgorithmM matType Bool := do
   let tableau ← get
   let lastIdx := tableau.free.size - 1
   -- First check feasibility: all basic variables must be non-negative
-  let feasible := tableau.basic.size.all 
+  let feasible := tableau.basic.size.all
     (fun i _ => i = 0 || tableau.mat[(i, lastIdx)]! ≥ 0)
   if not feasible then
     return false
   -- Check optimality: all reduced costs should be ≤ 0 for maximization
   -- (Skip the last column which is RHS)
-  let optimal := tableau.free.size.all (fun j _ => 
+  let optimal := tableau.free.size.all (fun j _ =>
     j == lastIdx || tableau.mat[(0, j)]! ≤ 0)  -- All reduced costs ≤ 0
   return optimal
 
@@ -105,7 +107,7 @@ def chooseEnteringVar : SimplexAlgorithmM matType Nat := do
 
   /- If there is no such variable the solution does not exist for sure. -/
   match enterIdxOpt with
-  | .none => throwThe SimplexAlgorithmException SimplexAlgorithmException.infeasible
+  | .none => throwThe SimplexAlgorithmException SimplexAlgorithmException.unbounded
   | .some enterIdx => return enterIdx
 
 /--
