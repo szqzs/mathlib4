@@ -227,6 +227,29 @@ example (x y : ℚ) (h1 : x + y < 10) (h2 : y > 4) : True := by
   maximize x / 2 with H
   trivial
 
+/-! ### Tests with a numeric additive constant in the maximization expression -/
+section
+
+/-- info: Try this: have H : 4 * x + y + 1 ≤ 7 := by linarith -/
+#guard_msgs in
+example (x y : ℚ) (h1 : 3 * x + y < 4) (h2 : x < 2) : True := by
+  maximize 4 * x + y + 1 with H
+  trivial
+
+/-- info: Try this: have H : -5 ≤ 4 * x + y + 1 := by linarith -/
+#guard_msgs in
+example (x y : ℚ) (h1 : 3 * x + y > -4) (h2 : x > -2) : True := by
+  minimize 4 * x + y + 1 with H
+  trivial
+
+/-- info: Try this: have H : x / 2 + 1 ≤ 4 := by linarith -/
+#guard_msgs in
+example (x y : ℚ) (h1 : x + y < 10) (h2 : y > 4) : True := by
+  maximize x / 2 + 1 with H
+  trivial
+
+end
+
 -- Test that should fail: unbounded maximize
 /-- error: maximize: an upper bound cannot be produced for x.
     The expression may be unbounded. -/

@@ -55,20 +55,24 @@ section Preprocessing
 
 /-- Parse the linarith structure by turning hypotheses and goal into a matrix.
 Returns `(comps, maxVar, goalScalingFactor) : List Comp × ℕ × ℤ. -/
-partial def parseLinarithStructure (ty H : Expr) (g : MVarId)
-    (cfg : TransparencyMode := .reducible) : MetaM (List Comp × ℕ × ℤ) := g.withContext do
+partial def parseLinarithStructure (ty H : Expr)
+    (cfg : TransparencyMode := .reducible) : MetaM (List Comp × ℕ × ℤ) := do
   let hyps := H :: (← getLocalHyps).toList
   let es ← Linarith.preprocessSimple Linarith.defaultLinearOptimPreprocessors hyps
   let hypSet ← es.filterM (fun h => return ty == (← typeOfIneqProof h))
   let (comps, maxVar, _) ← Mathlib.Tactic.Linarith.getLinearCombinations cfg hypSet
-  -- The `computeOptimalBound` function creates a dummy hypothesis of the form `e < 1`.
-  -- The `cancelDenoms` preprocessor transforms this into `k*e < k`, which is then
-  -- normalized to `k*e - k < 0`. Linarith's parser treats the constant `-k`
-  -- as the coefficient of a special variable with index 0.
+  -- The `computeOptimalBound` function creates a dummy variable `z`
+  -- and dummy hypothesis of the form `e < z`.
+  -- The `cancelDenoms` preprocessor transforms this into `k*e < k * z`, which is then
+  -- normalized to `k*e - k * z < 0`. Linarith's parser treats the constant `-k`
+  -- as the coefficient of a special variable with the largest index encountered.
   -- We extract this coefficient and negate it to recover the scaling factor `k`.
+  -- We also strip out all the dummy `z`-terms (there should only be one, in `k*e - k * z`)
   let goalComp := comps.getLast!
-  let scalingFactor := - goalComp.coeffs.zfind 0
-  return (comps, maxVar, scalingFactor)
+  let (dummyVar, negScalingFactor) := goalComp.coeffs.head!
+  let comps' := comps.map fun c ↦
+    { c with coeffs := c.coeffs.filter (fun p ↦ p.1 != dummyVar) }
+  return (comps', maxVar - 1, -negScalingFactor)
 
 end Preprocessing
 
@@ -100,7 +104,7 @@ section BoundComputation
 /-- Compute the optimal bound (upper bound for maximization, lower bound for minimization).
 Returns the optimal bound as a rational number. -/
 def computeOptimalBound (e_exp : Expr) (isMaximize : Bool) (g : MVarId) :
-    MetaM (Except SimplexAlgorithmException Rat) := do
+    MetaM (Except SimplexAlgorithmException Rat) := g.withContext do
   let ⟨u, ty, e_exp⟩ ← inferTypeQ' e_exp
   let _i ← synthInstanceQ q(PartialOrder $ty)
   let _i ← synthInstanceQ q(Ring $ty) -- Use Ring to ensure negation is available
@@ -108,19 +112,20 @@ def computeOptimalBound (e_exp : Expr) (isMaximize : Bool) (g : MVarId) :
   -- To find max(e), we run the pipeline on `e`.
   -- To find min(e), we run the pipeline on `-e` and use the identity min(e) = -max(-e).
   let target_exp := if isMaximize then e_exp else q(-$e_exp)
-  -- The dummy hypothesis is always `< 1` to ensure the scaling factor `k` is positive
-  -- and that the Comp object represents `k*E - k`.
-  let H := q(show $target_exp < 1 from sorry)
-  let (comps, maxVar, scalingFactor) ← parseLinarithStructure ty H g
+  -- The dummy hypothesis is always `< z` (for a new dummy variable `z`) to ensure the scaling
+  -- factor `k` is positive and that the Comp object represents `k*E`.
+  withLocalDecl .anonymous .default ty fun (z : Q($ty)) ↦ do
+  let H := q(show $target_exp < $z from sorry)
+  let (comps, maxVar, scalingFactor) ← parseLinarithStructure ty H
   let rH :: rr := comps.reverse | failure
   let A := preprocessLinearOptim DenseMatrix rH rr maxVar
   match ← Linarith.SimplexAlgorithm.simplexOptimalBound A with
   | .ok r_opt =>
     let k_q : ℚ := scalingFactor
     -- This derivation is based on the solver pipeline.
-    -- The pipeline takes a Comp for `k*E - k` and returns `r_opt = min(-(k*E - k))`.
-    -- This can be solved to show that `max(E) = (k - r_opt) / k`.
-    let max_of_target := (k_q - r_opt) / k_q
+    -- The pipeline takes a Comp for `k*E` and returns `r_opt = min(-(k*E))`.
+    -- This can be solved to show that `max(E) = (- r_opt) / k`.
+    let max_of_target := (- r_opt) / k_q
     if isMaximize then
       -- The target was `e`, so we have found `max(e)`.
       return Except.ok max_of_target
