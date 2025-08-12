@@ -142,7 +142,64 @@ end BoundComputation
 section TacticImplementation
 
 
-/-- The `maximize` tactic finds an upper bound for a linear expression. -/
+/-- The `maximize` tactic finds an upper bound for a linear expression given linear constraints.
+
+## Syntax
+
+```lean
+maximize <expression>
+maximize <expression> with <identifier>
+```
+
+The first form creates an anonymous hypothesis with the computed bound.
+The second form creates a hypothesis with the given identifier.
+
+## Description
+
+`maximize` uses the simplex algorithm to find an optimal upper bound for the given
+linear expression based on the linear constraints in the local context. It generates
+a `have` statement with the computed bound that is proved using `linarith`.
+
+## Examples
+
+### Success cases
+
+```lean
+example (x y : ℚ) (h1 : 3 * x + y < 4) (h2 : x < 2) : True := by
+  maximize 4 * x + y with H
+  -- Creates: have H : 4 * x + y ≤ 6 := by linarith
+  trivial
+```
+
+```lean
+example (x : ℚ) (h : x < 10) : True := by
+  maximize x
+  -- Creates: have : x ≤ 10 := by linarith
+  trivial
+```
+
+### Failure cases
+
+**Unbounded expression:**
+```lean
+example (x : ℚ) (h : x > 0) : True := by
+  maximize x
+  -- Error: maximize: an upper bound cannot be produced for x.
+  --        The expression may be unbounded.
+```
+
+**Inconsistent constraints:**
+```lean
+example (x : ℚ) (h1 : x > 0) (h2 : x < -5) : True := by
+  maximize x
+  -- Error: maximize: an upper bound cannot be produced for x.
+  --        The constraints may be inconsistent.
+```
+
+## See also
+
+* `minimize` - finds a lower bound for a linear expression
+-/
 elab "maximize" e_stx:term h_stx:(withArg)? : tactic => do
   let e_exp : Expr ← Elab.Tactic.elabTerm e_stx none
   -- Compute the bound, handling exceptions explicitly
@@ -165,7 +222,64 @@ elab "maximize" e_stx:term h_stx:(withArg)? : tactic => do
     -- Execute the tactic
     Elab.Tactic.evalTactic tacticStx
 
-/-- The `minimize` tactic finds a lower bound for a linear expression. -/
+/-- The `minimize` tactic finds a lower bound for a linear expression given linear constraints.
+
+## Syntax
+
+```lean
+minimize <expression>
+minimize <expression> with <identifier>
+```
+
+The first form creates an anonymous hypothesis with the computed bound.
+The second form creates a hypothesis with the given identifier.
+
+## Description
+
+`minimize` uses the simplex algorithm to find an optimal lower bound for the given
+linear expression based on the linear constraints in the local context. It generates
+a `have` statement with the computed bound that is proved using `linarith`.
+
+## Examples
+
+### Success cases
+
+```lean
+example (x y : ℚ) (h1 : 3 * x + y > -4) (h2 : x > -2) : True := by
+  minimize 4 * x + y with H
+  -- Creates: have H : -6 ≤ 4 * x + y := by linarith
+  trivial
+```
+
+```lean
+example (x : ℚ) (h : x > 5) : True := by
+  minimize x
+  -- Creates: have : 5 ≤ x := by linarith
+  trivial
+```
+
+### Failure cases
+
+**Unbounded expression:**
+```lean
+example (x : ℚ) (h : x < 0) : True := by
+  minimize x
+  -- Error: minimize: a lower bound cannot be produced for x.
+  --        The expression may be unbounded.
+```
+
+**Inconsistent constraints:**
+```lean
+example (x : ℚ) (h1 : x < 0) (h2 : x > 5) : True := by
+  minimize x
+  -- Error: minimize: a lower bound cannot be produced for x.
+  --        The constraints may be inconsistent.
+```
+
+## See also
+
+* `maximize` - finds an upper bound for a linear expression
+-/
 elab "minimize" e_stx:term h_stx:(withArg)? : tactic => do
   let e_exp : Expr ← Elab.Tactic.elabTerm e_stx none
   -- Compute the bound, handling exceptions explicitly
