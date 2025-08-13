@@ -25,23 +25,21 @@ bounds for linear expressions given linear constraints using the simplex algorit
 
 * `maximize` - Finds an upper bound for a linear expression
 * `minimize` - Finds a lower bound for a linear expression
-* `findPositiveVector` - Finds a positive vector solution using simplex algorithm
-* `runSimplexAlgorithm` - Core simplex algorithm implementation
+* `parseLinarithStructure` - Parses linear constraints into matrix form
+* `preprocessLinearOptim` - Converts constraints to matrix for simplex
+* `computeOptimalBound` - Core function computing optimal bounds
 
 ## Implementation
 
-Both tactics work by:
-1. Parsing the linear constraints and target expression
-2. Converting them to matrix form suitable for the simplex algorithm
-3. Finding the optimal solution using simplex with Bland's rule for pivoting
-4. Suggesting a `have` statement with the computed bound
+The `maximize` and `minimize` tactics work by:
+1. Parsing the linear constraints and target expression using `parseLinarithStructure`
+2. Converting them to matrix form suitable for the simplex algorithm via `preprocessLinearOptim`
+3. Finding the optimal solution using `computeOptimalBound` which calls `simplexOptimalBound`
+4. Suggesting a `have` statement with the computed bound that can be proved with `linarith`
 
-The certificate search is reduced to finding a nonnegative vector `v` such that some
-coordinates from strict inequalities are positive and `A v = 0`. This is solved using:
-
-1. Translation to a Linear Programming problem
-2. Gaussian elimination to get initial tableau
-3. Simplex algorithm with Bland's rule until solution is found
+The tactics handle the duality between maximization and minimization by transforming
+`minimize e` into `maximize -e` and then negating the result. The implementation uses
+a dummy variable trick to extract scaling factors introduced by the preprocessing pipeline.
 -/
 
 open Lean Lean.Elab Lean.Elab.Tactic Lean.Meta
@@ -54,7 +52,17 @@ namespace Mathlib.Tactic.LinearOptim
 section Preprocessing
 
 /-- Parse the linarith structure by turning hypotheses and goal into a matrix.
-Returns `(comps, maxVar, goalScalingFactor) : List Comp × ℕ × ℤ. -/
+
+This function processes linear constraints through the linarith pipeline and extracts
+the scaling factor introduced by the `cancelDenoms` preprocessor. It creates a dummy
+hypothesis `e < z` (where `z` is a fresh variable) to capture how the expression `e`
+is transformed. The preprocessor scales this to `k*e < k*z`, which becomes `k*e - k*z < 0`.
+The coefficient `-k` of the dummy variable `z` gives us the scaling factor.
+
+Returns `(comps, maxVar, goalScalingFactor) : List Comp × ℕ × ℤ` where:
+- `comps` are the processed constraints with dummy terms removed
+- `maxVar` is the maximum variable index (adjusted for dummy removal)
+- `goalScalingFactor` is the extracted scaling factor `k` -/
 partial def parseLinarithStructure (ty H : Expr)
     (cfg : TransparencyMode := .reducible) : MetaM (List Comp × ℕ × ℤ) := do
   let hyps := H :: (← getLocalHyps).toList
@@ -79,6 +87,17 @@ end Preprocessing
 
 section MatrixPreprocessing
 
+/-- Converts linear constraints into a matrix suitable for the simplex algorithm.
+
+This function takes the parsed constraints from `parseLinarithStructure` and builds
+a matrix for `simplexOptimalBound`. The matrix has dimensions `(maxVar + 1) × (rr.length + 1)`.
+
+The function reorders and transforms coefficients:
+- The objective function `rH` goes to the last column with negated coefficients
+- The second-to-last constraint from `rr` is moved to the first column
+- Other constraints maintain their relative positions
+
+This specific ordering prepares the matrix for the simplex algorithm's expected format. -/
 def preprocessLinearOptim (matType : ℕ → ℕ → Type) [UsableInSimplexAlgorithm matType]
     (rH : Linarith.Comp) (rr : List Linarith.Comp) (maxVar : ℕ) :
     matType (maxVar + 1) (rr.length + 1) :=
@@ -102,7 +121,20 @@ end MatrixPreprocessing
 section BoundComputation
 
 /-- Compute the optimal bound (upper bound for maximization, lower bound for minimization).
-Returns the optimal bound as a rational number. -/
+
+This function implements the core optimization logic, using the duality principle:
+- For maximization: directly find max(e) using the simplex algorithm
+- For minimization: find min(e) by computing max(-e) and negating the result
+
+The function creates a dummy variable `z` and hypothesis `target < z` to capture
+scaling factors from preprocessing. After running the simplex algorithm, it adjusts
+the result by the scaling factor to get the actual bound.
+
+The duality transformation `min(e) = -max(-e)` allows us to handle both maximize
+and minimize with a single simplex implementation.
+
+Returns the optimal bound as a rational number, or an error if the problem is
+unbounded or infeasible. -/
 def computeOptimalBound (e_exp : Expr) (isMaximize : Bool) (g : MVarId) :
     MetaM (Except SimplexAlgorithmException Rat) := g.withContext do
   let ⟨u, ty, e_exp⟩ ← inferTypeQ' e_exp
