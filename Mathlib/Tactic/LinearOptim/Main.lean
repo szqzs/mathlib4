@@ -94,7 +94,7 @@ a matrix for `simplexOptimalBound`. The matrix has dimensions `(maxVar + 1) × (
 
 The function reorders and transforms coefficients:
 - The objective function `rH` goes to the last column with negated coefficients
-- The second-to-last constraint from `rr` is moved to the first column
+- The last constraint from `rr` is moved to the first column
 - Other constraints maintain their relative positions
 
 This specific ordering prepares the matrix for the simplex algorithm's expected format. -/
