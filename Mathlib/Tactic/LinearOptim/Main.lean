@@ -46,6 +46,7 @@ open Lean Lean.Elab Lean.Elab.Tactic Lean.Meta
 open Mathlib.Tactic.Linarith Mathlib.Tactic.Linarith.SimplexAlgorithm
 open Mathlib.Tactic (getWithArg)
 open Qq
+open Lean.Meta.Tactic.TryThis (Suggestion)
 
 namespace Mathlib.Tactic.LinearOptim
 
@@ -94,7 +95,7 @@ a matrix for `simplexOptimalBound`. The matrix has dimensions `(maxVar + 1) × (
 
 The function reorders and transforms coefficients:
 - The objective function `rH` goes to the last column with negated coefficients
-- The last constraint from `rr` is moved to the first column
+- The second-to-last constraint from `rr` is moved to the first column
 - Other constraints maintain their relative positions
 
 This specific ordering prepares the matrix for the simplex algorithm's expected format. -/
@@ -243,15 +244,33 @@ elab "maximize" e_stx:term h_stx:(withArg)? : tactic => do
     throwError "maximize: an upper bound cannot be produced for {e_stx}.
     The expression may be unbounded."
   | .ok bound =>
-    -- Create the tactic syntax with explicit formatting
-    let tacticStx ← match h_stx with
-    | some h_stx =>
-      let v : TSyntax `ident := ⟨← getWithArg h_stx⟩
-      `(tactic| have $v : $e_stx ≤ $(quote bound) := by linarith)
-    | none => `(tactic| have : $e_stx ≤ $(quote bound) := by linarith)
-    -- Add suggestion using getRef for current tactic position
+    -- Check which inequality type can be proved
+    let canProveStrict ← (← getMainGoal).withContext do
+      try
+        -- Create a fresh goal for the strict inequality
+        let strictType ← elabTerm (← `($e_stx < $(quote bound))) none
+        let strictGoal ← mkFreshExprMVar strictType
+        Mathlib.Tactic.Linarith.linarith false [] {} strictGoal.mvarId!
+        pure true
+      catch _ =>
+        pure false
+
+    -- Create the appropriate tactic syntax
+    let tacticStx : TSyntax `tactic ← if canProveStrict then
+      match h_stx with
+      | some h_stx =>
+        let v : TSyntax `ident := ⟨← getWithArg h_stx⟩
+        `(tactic| have $v : $e_stx < $(quote bound) := by linarith)
+      | none => `(tactic| have : $e_stx < $(quote bound) := by linarith)
+    else
+      match h_stx with
+      | some h_stx =>
+        let v : TSyntax `ident := ⟨← getWithArg h_stx⟩
+        `(tactic| have $v : $e_stx ≤ $(quote bound) := by linarith)
+      | none => `(tactic| have : $e_stx ≤ $(quote bound) := by linarith)
+
+    -- Execute and suggest the tactic
     Lean.Meta.Tactic.TryThis.addSuggestion (← getRef) tacticStx
-    -- Execute the tactic
     Elab.Tactic.evalTactic tacticStx
 
 /-- The `minimize` tactic finds a lower bound for a linear expression given linear constraints.
@@ -323,15 +342,33 @@ elab "minimize" e_stx:term h_stx:(withArg)? : tactic => do
     throwError "minimize: a lower bound cannot be produced for {e_stx}.
     The expression may be unbounded."
   | .ok bound =>
-    -- Create the tactic syntax with explicit formatting
-    let tacticStx ← match h_stx with
-    | some h_stx =>
-      let v : TSyntax `ident := ⟨← getWithArg h_stx⟩
-      `(tactic| have $v : $(quote bound) ≤ $e_stx := by linarith)
-    | none => `(tactic| have : $(quote bound) ≤ $e_stx := by linarith)
-    -- Add suggestion using getRef for current tactic position
+    -- Check which inequality type can be proved
+    let canProveStrict ← (← getMainGoal).withContext do
+      try
+        -- Create a fresh goal for the strict inequality
+        let strictType ← elabTerm (← `($(quote bound) < $e_stx)) none
+        let strictGoal ← mkFreshExprMVar strictType
+        Mathlib.Tactic.Linarith.linarith false [] {} strictGoal.mvarId!
+        pure true
+      catch _ =>
+        pure false
+
+    -- Create the appropriate tactic syntax
+    let tacticStx : TSyntax `tactic ← if canProveStrict then
+      match h_stx with
+      | some h_stx =>
+        let v : TSyntax `ident := ⟨← getWithArg h_stx⟩
+        `(tactic| have $v : $(quote bound) < $e_stx := by linarith)
+      | none => `(tactic| have : $(quote bound) < $e_stx := by linarith)
+    else
+      match h_stx with
+      | some h_stx =>
+        let v : TSyntax `ident := ⟨← getWithArg h_stx⟩
+        `(tactic| have $v : $(quote bound) ≤ $e_stx := by linarith)
+      | none => `(tactic| have : $(quote bound) ≤ $e_stx := by linarith)
+
+    -- Execute and suggest the tactic
     Lean.Meta.Tactic.TryThis.addSuggestion (← getRef) tacticStx
-    -- Execute the tactic
     Elab.Tactic.evalTactic tacticStx
 
 end TacticImplementation
