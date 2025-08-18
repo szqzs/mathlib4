@@ -19,12 +19,45 @@ abbrev GaussM (n m : Nat) (matType : Nat → Nat → Type) := StateT (matType n 
 
 variable {n m : Nat} {matType : Nat → Nat → Type} [UsableInSimplexAlgorithm matType]
 
-/-- Finds the first row starting from the `rowStart` with nonzero element in the column `col`. -/
+/-- Finds a suitable pivot row for Gaussian elimination with feasibility preference.
+This function implements a two-phase pivot selection strategy:
+
+1. **Feasibility-first selection**: Among all rows with nonzero elements in column `col`
+   (starting from `rowStart`), prefer rows where the resulting basic variable would be
+   non-negative (i.e., `rhs/pivot ≥ 0`).
+
+2. **Degeneracy handling**: If no feasible pivot exists, decide whether to skip this column
+   (if we have more remaining columns than rows) or use the first available nonzero pivot.
+
+This approach helps maintain feasibility during Gaussian elimination and handles cases where
+standard pivoting might lead to negative basic variables. -/
 def findNonzeroRow (rowStart col : Nat) : GaussM n m matType <| Option Nat := do
+  let mat ← get
+  let lastCol := m - 1
+
+  let mut candidates : Array Nat := #[]
   for i in [rowStart:n] do
-    if (← get)[(i, col)]! != 0 then
+    if mat[(i, col)]! != 0 then
+      candidates := candidates.push i
+
+  if candidates.isEmpty then
+    return .none
+
+  -- First pass: prefer pivots that give feasible basic variables (rhs/pivot >= 0)
+  for i in candidates do
+    let pivot := mat[(i, col)]!
+    let rhs := -mat[(i, lastCol)]!
+    if (rhs >= 0 && pivot > 0) || (rhs <= 0 && pivot < 0) then
       return i
-  return .none
+
+  -- Second pass: if no feasible pivot exists, decide whether to skip or use first candidate
+  let remainingCols := m - col - 1
+  let remainingRows := n - rowStart
+
+  if remainingCols > remainingRows then
+    return .none
+  else
+    return candidates[0]!
 
 /-- Implementation of `getTableau` in `GaussM` monad. -/
 def getTableauImp : GaussM n m matType <| Tableau matType := do

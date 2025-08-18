@@ -383,6 +383,12 @@ def defaultPreprocessors : List GlobalBranchingPreprocessor :=
   [filterComparisons, removeNegations, natToInt, strengthenStrictInt,
     compWithZero, cancelDenoms]
 
+/-- The default preprocessors for the linear optimization tactics.
+Throws away non-linear-inequality hypotheses, pushes negations, turns inequalities into ≤,
+moves terms to the left hand side, and cancels denominators. -/
+def defaultLinearOptimPreprocessors : List Preprocessor :=
+  [filterComparisons, removeNegations, strengthenStrictInt, compWithZero, cancelDenoms]
+
 /--
 `preprocess pps l` takes a list `l` of proofs of propositions.
 It maps each preprocessor `pp ∈ pps` over this list.
@@ -396,5 +402,15 @@ def preprocess (pps : List GlobalBranchingPreprocessor) (g : MVarId) (l : List E
     g.withContext <|
       pps.foldlM (init := [(g, l)]) fun ls pp => do
         return (← ls.mapM fun (g, l) => do pp.process g l).flatten
+
+/-- `preprocessSimple pps l` takes a list `l` of proofs of propositions.
+It maps each preprocessor `pp ∈ pps` over this list.
+The preprocessors are run sequentially: each receives the output of the previous one.
+Note that a preprocessor may produce multiple or no expressions from each input expression,
+so the size of the list may change.
+This is a variant of `preprocess` for simple `Preprocessor`s rather than
+``GlobalBranchingPreprocessor`s. It is designed for maximize and minimize tactics in LinearOptim. -/
+def preprocessSimple (pps : List Preprocessor) (l : List Expr) : MetaM (List Expr) :=
+  pps.foldlM (init := l) fun ls pp => pp.globalize.transform ls
 
 end Mathlib.Tactic.Linarith

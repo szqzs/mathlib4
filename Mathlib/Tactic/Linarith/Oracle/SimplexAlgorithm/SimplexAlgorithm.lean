@@ -18,6 +18,8 @@ namespace Mathlib.Tactic.Linarith.SimplexAlgorithm
 inductive SimplexAlgorithmException
   /-- The solution is infeasible. -/
 | infeasible : SimplexAlgorithmException
+  /-- The solution is unbounded. -/
+| unbounded : SimplexAlgorithmException
 
 /-- The monad for the Simplex Algorithm. -/
 abbrev SimplexAlgorithmM (matType : Nat → Nat → Type) [UsableInSimplexAlgorithm matType] :=
@@ -62,6 +64,34 @@ def checkSuccess : SimplexAlgorithmM matType Bool := do
   return (← get).mat[(0, lastIdx)]! > 0 &&
     (← (← get).basic.size.allM (fun i _ => do return (← get).mat[(i, lastIdx)]! ≥ 0))
 
+
+
+
+/-- Check if the linear optimization solution is found.
+This is a specialized version of `checkSuccess` for linear optimization (maximize/minimize) with
+different success criteria from the standard linarith simplex algorithm:
+
+1. **Feasibility check**: All basic variables must be non-negative (same as standard)
+2. **Optimality check**: All reduced costs should be ≤ 0 for maximization problems
+
+The key difference from the standard `checkSuccess` is that this checks for optimality
+(reduced costs ≤ 0) rather than just requiring the objective value to be positive.
+This is appropriate for linear programming optimization where we want to find the optimal
+value, not just prove feasibility. -/
+def checkLinearOptimSuccess : SimplexAlgorithmM matType Bool := do
+  let tableau ← get
+  let lastIdx := tableau.free.size - 1
+  -- First check feasibility: all basic variables must be non-negative
+  let feasible := tableau.basic.size.all
+    (fun i _ => i = 0 || tableau.mat[(i, lastIdx)]! ≥ 0)
+  if not feasible then
+    return false
+  -- Check optimality: all reduced costs should be ≤ 0 for maximization
+  -- (Skip the last column which is RHS)
+  let optimal := tableau.free.size.all (fun j _ =>
+    j == lastIdx || tableau.mat[(0, j)]! ≤ 0)  -- All reduced costs ≤ 0
+  return optimal
+
 /--
 Chooses an entering variable: among the variables with a positive coefficient in the objective
 function, the one with the smallest index (in the initial indexing).
@@ -77,7 +107,7 @@ def chooseEnteringVar : SimplexAlgorithmM matType Nat := do
 
   /- If there is no such variable the solution does not exist for sure. -/
   match enterIdxOpt with
-  | .none => throwThe SimplexAlgorithmException SimplexAlgorithmException.infeasible
+  | .none => throwThe SimplexAlgorithmException SimplexAlgorithmException.unbounded
   | .some enterIdx => return enterIdx
 
 /--
@@ -98,7 +128,9 @@ def chooseExitingVar (enterIdx : Nat) : SimplexAlgorithmM matType Nat := do
       exitIdxOpt := i
       minCoef := coef
       minIdx := (← get).basic[i]!
-  return exitIdxOpt.get! -- such variable always exists because our problem is bounded
+  match exitIdxOpt with
+  | .none => throwThe SimplexAlgorithmException SimplexAlgorithmException.infeasible
+  | .some exitIdx => return exitIdx
 
 /--
 Chooses entering and exiting variables using
@@ -113,11 +145,36 @@ def choosePivots : SimplexAlgorithmM matType (Nat × Nat) := do
 /--
 Runs the Simplex Algorithm inside the `SimplexAlgorithmM`. It always terminates, finding solution if
 such exists.
+
+This function should be used when you need to determine if a system has a feasible solution,
+as opposed to `runSimplexAlgorithmOptim` and `runLinearOptimSimplex` which focus on
+optimization problems.
 -/
 def runSimplexAlgorithm : SimplexAlgorithmM matType Unit := do
   while !(← checkSuccess) do
     Lean.Core.checkSystem decl_name%.toString
     let ⟨exitIdx, enterIdx⟩ ← choosePivots
     doPivotOperation exitIdx enterIdx
+
+/-- Runs the Simplex Algorithm for optimization problems using optimality checks.
+This is identical to `runSimplexAlgorithm` except it uses `checkLinearOptimSuccess`
+which verifies both feasibility and optimality conditions. -/
+def runSimplexAlgorithmOptim : SimplexAlgorithmM matType Unit := do
+  while !(← checkLinearOptimSuccess) do
+    Lean.Core.checkSystem decl_name%.toString
+    let ⟨exitIdx, enterIdx⟩ ← choosePivots
+    doPivotOperation exitIdx enterIdx
+
+/-- Solves a linear programming optimization problem and returns the optimal value.
+This function runs the optimization-focused simplex algorithm and extracts
+the optimal objective value from the final tableau.
+
+This function should be used when you need to solve linear programming problems for
+optimization, as opposed to the standard `runSimplexAlgorithm` which focuses on feasibility. -/
+def runLinearOptimSimplex : SimplexAlgorithmM matType Rat := do
+  runSimplexAlgorithmOptim
+  let tableau ← get
+  let lastIdx := tableau.free.size - 1
+  return tableau.mat[(0, lastIdx)]!
 
 end Mathlib.Tactic.Linarith.SimplexAlgorithm
